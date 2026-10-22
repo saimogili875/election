@@ -504,6 +504,16 @@ def stream_extract_rows(interview: Interview) -> Generator[Dict[str, Any], None,
             time.sleep(1)
 
     raw_full_text = "".join(accumulated_chunks)
+    if len(extracted_rows) > 0:
+        interview.raw_extract_response = raw_full_text
+        interview.status = 'done'
+        interview.finished_at = timezone.now()
+        interview.save(update_fields=['raw_extract_response', 'status', 'finished_at'])
+        run_log.ended_at = timezone.now()
+        run_log.message = f"Stream ended with partial exception, but saved {len(extracted_rows)} Gemini extracted rows."
+        run_log.save()
+        return extracted_rows
+
     err_msg = f"Extraction failed: {str(last_error)}"
     interview.raw_extract_response = raw_full_text
     interview.error = err_msg
