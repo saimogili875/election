@@ -19,10 +19,88 @@
     </div>
   </div>
 
-  <div style="display: flex; gap: 0.5rem;">
+  <div style="display: flex; gap: 0.5rem; align-items: center;">
+    <a href="/sheet/?interview={{ interview.id }}" class="btn btn-primary btn-sm" style="background-color: #2563eb;">📊 Open Sheet</a>
     <a href="/review/{{ interview.id }}/" class="btn btn-secondary btn-sm">Review (✓/✗)</a>
-    <a href="/sheet/?interview={{ interview.id }}" class="btn btn-primary btn-sm">Full Sheet</a>
     <a href="/interview/{{ interview.id }}/export/json/" class="btn btn-secondary btn-sm" target="_blank">Export JSON</a>
+  </div>
+</div>
+
+<!-- Live Pipeline Stage Stepper & Real-time Activity Ticker -->
+<div class="card" style="margin-bottom: 1rem; padding: 0.85rem 1.25rem; background: #0f172a; border: 1px solid var(--border);">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem;">
+    <div style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.4rem;">
+      <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: {% if interview.status == 'done' %}#10b981{% elif interview.status == 'failed' %}#ef4444{% else %}#3b82f6{% endif %}; box-shadow: 0 0 8px {% if interview.status == 'done' %}#10b981{% elif interview.status == 'failed' %}#ef4444{% else %}#3b82f6{% endif %};"></span>
+      Pipeline Execution Stages:
+    </div>
+    <div style="font-size: 0.75rem; color: #94a3b8;">
+      Model: <strong style="color: #60a5fa;">{{ interview.model_name|default:"gemini-2.5-flash" }}</strong>
+      {% if interview.duration_seconds %}• Latency: <strong style="color: #34d399;">{{ interview.duration_seconds }}s</strong>{% endif %}
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
+    <!-- Step 1: Input Ingestion -->
+    <div style="display: flex; align-items: center; gap: 0.5rem; background: rgba(30, 41, 59, 0.7); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid #334155;">
+      <span style="font-size: 1.1rem; color: #34d399;">✓</span>
+      <div>
+        <div style="font-size: 0.75rem; font-weight: 600; color: #f8fafc;">1. Ingestion</div>
+        <div style="font-size: 0.7rem; color: var(--text-muted);">{% if interview.audio_file %}Audio Upload{% else %}Direct Text Paste{% endif %}</div>
+      </div>
+    </div>
+
+    <!-- Step 2: Transcript Preparation -->
+    <div style="display: flex; align-items: center; gap: 0.5rem; background: rgba(30, 41, 59, 0.7); padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid #334155;">
+      <span style="font-size: 1.1rem; color: #34d399;">✓</span>
+      <div>
+        <div style="font-size: 0.75rem; font-weight: 600; color: #f8fafc;">2. Telugu Notes</div>
+        <div style="font-size: 0.7rem; color: var(--text-muted);" id="step-transcript-info">{{ interview.transcript|length }} characters</div>
+      </div>
+    </div>
+
+    <!-- Step 3: Gemini Extraction -->
+    <div id="step-extract-card" style="display: flex; align-items: center; gap: 0.5rem; background: {% if interview.status == 'done' %}rgba(16, 185, 129, 0.15){% elif interview.status == 'failed' %}rgba(239, 68, 68, 0.15){% else %}rgba(59, 130, 246, 0.15){% endif %}; padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid {% if interview.status == 'done' %}#10b981{% elif interview.status == 'failed' %}#ef4444{% else %}#3b82f6{% endif %};">
+      <span id="step-extract-icon" style="font-size: 1.1rem; color: {% if interview.status == 'done' %}#10b981{% elif interview.status == 'failed' %}#ef4444{% else %}#60a5fa{% endif %};">
+        {% if interview.status == 'done' %}✓{% elif interview.status == 'failed' %}✗{% else %}⚡{% endif %}
+      </span>
+      <div>
+        <div style="font-size: 0.75rem; font-weight: 600; color: #f8fafc;" id="step-extract-title">
+          3. Gemini AI Extraction
+        </div>
+        <div style="font-size: 0.7rem; color: {% if interview.status == 'done' %}#6ee7b7{% elif interview.status == 'failed' %}#fca5a5{% else %}#93c5fd{% endif %};" id="step-extract-sub">
+          {% if interview.status == 'done' %}{{ existing_rows|length }} rows completed{% elif interview.status == 'failed' %}Failed{% else %}Extracting rows live...{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Master Sheet -->
+    <div id="step-sheet-card" style="display: flex; align-items: center; gap: 0.5rem; background: {% if interview.status == 'done' %}rgba(16, 185, 129, 0.15){% else %}rgba(30, 41, 59, 0.7){% endif %}; padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid {% if interview.status == 'done' %}#10b981{% else %}#334155{% endif %};">
+      <span id="step-sheet-icon" style="font-size: 1.1rem; color: {% if interview.status == 'done' %}#34d399{% else %}var(--text-muted){% endif %};">
+        {% if interview.status == 'done' %}✓{% else %}⏳{% endif %}
+      </span>
+      <div>
+        <div style="font-size: 0.75rem; font-weight: 600; color: #f8fafc;">4. Master Sheet</div>
+        <div style="font-size: 0.7rem; color: var(--text-muted);" id="step-sheet-sub">
+          {% if interview.status == 'done' %}<a href="/sheet/?interview={{ interview.id }}" style="color: #60a5fa; text-decoration: underline;">Open Sheet →</a>{% else %}Pending completion{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Activity Ticker (Tells user exactly WHERE extraction is happening) -->
+  <div id="live-activity-banner" style="margin-top: 0.75rem; font-size: 0.8rem; background: rgba(15, 23, 42, 0.6); padding: 0.45rem 0.85rem; border-radius: 6px; border: 1px dashed #334155; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+    <span id="current-activity-text" style="color: #cbd5e1;">
+      {% if interview.status == 'done' %}
+        <span style="color: #34d399; font-weight: 600;">✓ Extraction Complete:</span> All {{ existing_rows|length }} problem rows extracted and saved to database. Ready in Live Sheet!
+      {% elif interview.status == 'failed' %}
+        <span style="color: #ef4444; font-weight: 600;">✗ Failed:</span> {{ interview.error }}
+      {% else %}
+        <span style="color: #60a5fa; font-weight: 600;">⚡ Active Extraction:</span> Gemini is streaming structured problem rows live...
+      {% endif %}
+    </span>
+    <span id="current-stage-badge" class="badge-{% if interview.status == 'done' %}green{% elif interview.status == 'failed' %}red{% else %}blue{% endif %}" style="font-size: 0.7rem;">
+      STAGE: {{ interview.status|upper }}
+    </span>
   </div>
 </div>
 
@@ -246,6 +324,18 @@
           }, idx * 120);
         }
       });
+
+      // Update Live Activity Ticker with current problem & location
+      const actText = document.getElementById('current-activity-text');
+      const stepExtractSub = document.getElementById('step-extract-sub');
+      if (actText) {
+        const whereStr = row.where ? `<strong style="color: #60a5fa;">${row.where}</strong>` : 'Ward 119 Colony';
+        const whatStr = row.what ? row.what.substring(0, 50) + (row.what.length > 50 ? '...' : '') : 'Civic Issue';
+        actText.innerHTML = `⚡ <span style="color: #60a5fa; font-weight: 600;">Extracting Row #${row.order_no}:</span> ${whereStr} • <em>${row.category}</em> — "${whatStr}"`;
+      }
+      if (stepExtractSub) {
+        stepExtractSub.textContent = `${totalRows} rows extracted live...`;
+      }
     });
 
     eventSource.addEventListener('cell_filled', (e) => {
@@ -264,6 +354,48 @@
       statusBadge.className = 'badge-green';
       transcriptBox.classList.remove('typing-cursor');
       streamIndicator.style.display = 'none';
+
+      // Update Stepper to Done
+      const extractCard = document.getElementById('step-extract-card');
+      const extractIcon = document.getElementById('step-extract-icon');
+      const extractSub = document.getElementById('step-extract-sub');
+      const sheetCard = document.getElementById('step-sheet-card');
+      const sheetIcon = document.getElementById('step-sheet-icon');
+      const sheetSub = document.getElementById('step-sheet-sub');
+      const actText = document.getElementById('current-activity-text');
+      const stageBadge = document.getElementById('current-stage-badge');
+
+      if (extractCard) {
+        extractCard.style.background = 'rgba(16, 185, 129, 0.15)';
+        extractCard.style.borderColor = '#10b981';
+      }
+      if (extractIcon) {
+        extractIcon.textContent = '✓';
+        extractIcon.style.color = '#10b981';
+      }
+      if (extractSub) {
+        extractSub.textContent = `${totalRows} rows completed`;
+        extractSub.style.color = '#6ee7b7';
+      }
+      if (sheetCard) {
+        sheetCard.style.background = 'rgba(16, 185, 129, 0.15)';
+        sheetCard.style.borderColor = '#10b981';
+      }
+      if (sheetIcon) {
+        sheetIcon.textContent = '✓';
+        sheetIcon.style.color = '#34d399';
+      }
+      if (sheetSub) {
+        sheetSub.innerHTML = `<a href="/sheet/?interview=${interviewId}" style="color: #60a5fa; text-decoration: underline; font-weight: 600;">Open Master Sheet (${totalRows} rows) →</a>`;
+      }
+      if (actText) {
+        actText.innerHTML = `<span style="color: #34d399; font-weight: 600;">✓ Extraction Complete:</span> All ${totalRows} problem rows saved. Click <a href="/sheet/?interview=${interviewId}" style="color: #60a5fa; text-decoration: underline;">Open Master Sheet</a> to view and export.`;
+      }
+      if (stageBadge) {
+        stageBadge.className = 'badge-green';
+        stageBadge.textContent = 'STAGE: DONE';
+      }
+
       if (eventSource) eventSource.close();
     });
 
