@@ -35,7 +35,7 @@ class Interview(models.Model):
     area = models.ForeignKey(Area, on_delete=models.SET_NULL, null=True, blank=True, related_name='interviews')
     speaker_name = models.CharField(max_length=255)
     speaker_phone = models.CharField(max_length=50, blank=True, default='')
-    audio_file = models.FileField(upload_to=audio_upload_path)
+    audio_file = models.FileField(upload_to=audio_upload_path, blank=True, null=True)
     transcript = models.TextField(blank=True, default='')
     prompt_version = models.ForeignKey(PromptVersion, on_delete=models.SET_NULL, null=True, blank=True, related_name='interviews')
     model_name = models.CharField(max_length=100, default='gemini-2.5-flash')

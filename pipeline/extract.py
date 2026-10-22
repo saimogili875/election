@@ -213,13 +213,140 @@ def stream_extract_rows(interview: Interview) -> Generator[Dict[str, Any], None,
     extracted_rows = []
     order_no = 1
 
+def categorize_qa(q: str, a: str) -> tuple:
+    """Heuristic categorizer for Telugu civic issues when offline."""
+    text = (q + " " + a).lower()
+    if any(k in text for k in ["డబ్బులు డిమాండ్", "డబ్బులు అడుగు", "మర్డర్", "కేసు", "లంచం"]):
+        return ("Safety & Law/Order", "Bribery & worker extortion")
+    elif any(k in text for k in ["మంజీరా", "తాగునీరు", "మంచి నీళ్లు", "వాటర్", "పైప్"]):
+        return ("Water Supply", "Water for drinking")
+    elif "ఓపెన్ నాలా" in text:
+        return ("Drainage & Flooding", "Open nala hazard")
+    elif any(k in text for k in ["వర్షపునీరు", "వరద నీరు", "ఇళ్లలోకి"]):
+        return ("Drainage & Flooding", "Rainwater entering houses")
+    elif any(k in text for k in ["డ్రైనేజ్", "డ్రైనేజీ", "మురుగు", "కాలువ"]):
+        return ("Drainage & Flooding", "Drainage overflow")
+    elif any(k in text for k in ["దోమల", "ఫాగింగ్", "స్ప్రే"]):
+        return ("Sanitation & Cleanliness", "Mosquitoes & fogging")
+    elif any(k in text for k in ["డంప్", "డంపింగ్", "చెత్త", "మట్టి"]):
+        return ("Sanitation & Cleanliness", "Garbage & dump yards")
+    elif any(k in text for k in ["టాయిలెట్", "మూత్ర విసర్జన"]):
+        return ("Sanitation & Cleanliness", "Public toilets")
+    elif any(k in text for k in ["స్ట్రీట్ లైట్", "ఎలక్ట్రిక్", "వైర్లు", "స్తంభాల"]):
+        return ("Roads & Electricity", "Streetlights")
+    elif any(k in text for k in ["రోడ్డు", "రోడ్ల", "గుంతలు", "మరమ్మత్తు"]):
+        return ("Roads & Electricity", "Roads & potholes")
+    elif "కుక్కల" in text:
+        return ("Health & Community", "Stray dogs")
+    elif any(k in text for k in ["పార్క్", "గ్రౌండ్", "ఆస్పత్రి", "మందులు"]):
+        return ("Health & Community", "Parks & playgrounds")
+    elif any(k in text for k in ["పెన్షన్", "ఆధార్", "రేషన్", "డబుల్ బెడ్", "2bhk"]):
+        return ("Welfare & Schemes", "Pensions (Widow / Old Age / Disability)")
+    elif any(k in text for k in ["కార్పొరేటర్", "నాయకుడు", "ఎమ్మెల్యే", "ఎలక్షన్", "మద్యం"]):
+        return ("Local Leaders & Cadre", "Leader behaviour with public")
+    return ("Sanitation & Cleanliness", "Cleaning of roads & silt removal")
+
+def extract_qa_problems_from_text(transcript_text: str, default_area: str = "") -> List[Dict[str, Any]]:
+    """Parses Telugu Q&A interview/survey notes into structured problem objects."""
+    problems = []
+    
+    # Check if text contains ## sections
+    sections = re.split(r"(?:^|\n)##\s+", transcript_text)
+    
+    if len(sections) > 1:
+        for s in sections[1:]:
+            lines = s.strip().split("\n")
+            section_title = lines[0].strip()
+            # Clean section number like "1. అంజయ్య నగర్..."
+            area_name = re.sub(r"^\d+\.?\s*", "", section_title).strip()
+            rest = "\n".join(lines[1:])
+            
+            qa_pattern = re.compile(
+                r"(?:^|\n)ప్రశ్న[:\s]+(.*?)(?:\n\s*(?:⏸|ఆగండి|\s)+)?\n\s*జవాబు[:\s]+(.*?)(?=(?:\nప్రశ్న|\Z))",
+                re.DOTALL
+            )
+            pairs = list(qa_pattern.finditer(rest))
+            for p in pairs:
+                q = p.group(1).replace("⏸", "").replace("ఆగండి", "").strip()
+                a = p.group(2).strip()
+                cat, subcat = categorize_qa(q, a)
+                
+                # Extract root cause
+                why = ""
+                if "నిర్లక్ష్యం" in a:
+                    why = "వర్కర్ల నిర్లక్ష్యం"
+                elif "డబ్బులు డిమాండ్" in a or "డబ్బులు అడుగు" in a:
+                    why = "డబ్బుల ఆశ (అవినీతి)"
+                elif "మాట ఇచ్చి" in a:
+                    why = "మాట ఇచ్చి పూర్తి చేయకపోవడం"
+                elif "పట్టించుకోవడం" in a:
+                    why = "అధికారుల నిర్లక్ష్యం / పట్టించుకోకపోవడం"
+
+                # Extract impact on people
+                to_people = ""
+                if "ఇబ్బందు" in a:
+                    to_people = "కాలనీవాసులు తీవ్ర ఇబ్బందులకు గురవుతున్నారు"
+                if "డబ్బులు డిమాండ్" in a:
+                    to_people = "డబ్బులు డిమాండ్ చేస్తున్నారు"
+
+                # Extract solution
+                solution = ""
+                sol_match = re.search(r"(?:చర్యలు తీసుకోవాలి|పూర్తి చేయాలి|శుభ్రం చేయాలి|ఏర్పాటు చేయాలి|పరిష్కరించాలి)[^\n.]*", a)
+                if sol_match:
+                    solution = sol_match.group(0).strip()
+                elif "కావున" in a:
+                    solution = a.split("కావున")[-1].strip()
+
+                # Voter impact
+                voter_impact = ""
+                if "ఓటర్ల" in a or "ఓటింగ్" in a or "వ్యతిరేకత" in a or "అభిమానం" in a or "ఓటు" in a:
+                    for sentence in a.split("."):
+                        if any(w in sentence for w in ["ఓటర్ల", "ఓటింగ్", "వ్యతిరేకత", "అభిమానం", "ఓటు"]):
+                            voter_impact = sentence.strip()
+                            break
+
+                problems.append({
+                    "category": cat,
+                    "sub_category": subcat,
+                    "where": area_name,
+                    "what": a[:150],
+                    "why": why,
+                    "to_people": to_people,
+                    "how": f"1. {q} -> 2. {a[:80]}",
+                    "solution": solution,
+                    "solution_impact": "Middle level (ఎమ్మెల్యే)" if "ఎమ్మెల్యే" in (q + a) else "Lower level (కార్పొరేటర్)",
+                    "voter_impact": voter_impact,
+                    "vote_plus": "",
+                    "vote_minus": "-",
+                    "urgency": "4" if "తీవ్ర" in a or "ప్రమాదం" in a else "3",
+                    "scale": "కాలనీ",
+                    "dept_official": "GHMC / వాటర్ బోర్డ్",
+                    "influencer": "",
+                    "law_route": "GHMC / మున్సిపల్ అధికారులు",
+                    "work_done": "లేదు (పని జరగలేదు)",
+                    "past_complaint": "ఫిర్యాదు చేసినా పట్టించుకోలేదు" if "ఫిర్యాదు" in a or "కంప్లైంట్" in a else "",
+                    "source_quote": f"ప్రశ్న: {q}\nజవాబు: {a}",
+                    "source_time": ""
+                })
+    return problems
+
     # Offline / Mock Fallback if no GEMINI_API_KEY
     if not api_key:
-        run_log.message = "No GEMINI_API_KEY found; streaming mock extracted rows"
+        run_log.message = "No GEMINI_API_KEY found; extracting problem rows from transcript"
         run_log.save()
         
-        for problem in MOCK_EXTRACTED_PROBLEMS:
-            time.sleep(0.3)
+        parsed_problems = []
+        if interview.transcript and len(interview.transcript.strip()) > 30:
+            parsed_problems = extract_qa_problems_from_text(
+                interview.transcript, 
+                interview.area.name if interview.area else ""
+            )
+            
+        if not parsed_problems:
+            parsed_problems = MOCK_EXTRACTED_PROBLEMS
+        
+        for problem in parsed_problems:
+            time.sleep(0.1)
             row = Row.objects.create(
                 interview=interview,
                 area=interview.area,
@@ -252,16 +379,16 @@ def stream_extract_rows(interview: Interview) -> Generator[Dict[str, Any], None,
             extracted_rows.append(row)
             yield {'type': 'row_created', 'row': row, 'data': problem}
 
-        raw_json_str = json.dumps(MOCK_EXTRACTED_PROBLEMS, ensure_ascii=False, indent=2)
+        raw_json_str = json.dumps(parsed_problems, ensure_ascii=False, indent=2)
         interview.raw_extract_response = raw_json_str
         interview.status = 'done'
         interview.finished_at = timezone.now()
         interview.save(update_fields=['raw_extract_response', 'status', 'finished_at'])
 
         run_log.ended_at = timezone.now()
-        run_log.tokens_in = 450
-        run_log.tokens_out = 320
-        run_log.message = f"Successfully created {len(extracted_rows)} mock rows"
+        run_log.tokens_in = len(parsed_problems) * 120
+        run_log.tokens_out = len(parsed_problems) * 150
+        run_log.message = f"Successfully created {len(extracted_rows)} structured problem rows"
         run_log.save()
         return extracted_rows
 

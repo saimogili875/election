@@ -56,8 +56,13 @@ def upload_view(request):
         speaker_phone = request.POST.get("speaker_phone", "").strip()
         prompt_version_id = request.POST.get("prompt_version")
         audio_file = request.FILES.get("audio_file")
+        pasted_transcript = request.POST.get("pasted_transcript", "").strip()
 
-        if not audio_file or not speaker_name:
+        transcript_file = request.FILES.get("transcript_file")
+        if transcript_file and not pasted_transcript:
+            pasted_transcript = transcript_file.read().decode("utf-8", errors="ignore").strip()
+
+        if not audio_file and not pasted_transcript:
             areas = Area.objects.all().order_by("name")
             prompts = PromptVersion.objects.all().order_by("-created_at")
             return render(
@@ -66,9 +71,12 @@ def upload_view(request):
                 {
                     "areas": areas,
                     "prompts": prompts,
-                    "error": "Please provide an audio file and speaker name.",
+                    "error": "Please provide an audio file OR paste the Telugu transcript/field notes.",
                 },
             )
+
+        if not speaker_name:
+            speaker_name = "Ward 119 Field Survey"
 
         area = Area.objects.filter(id=area_id).first() if area_id else None
         prompt_version = (
@@ -84,6 +92,8 @@ def upload_view(request):
             speaker_name=speaker_name,
             speaker_phone=speaker_phone,
             audio_file=audio_file,
+            transcript=pasted_transcript,
+            raw_transcript_response=pasted_transcript if pasted_transcript else "",
             prompt_version=prompt_version,
             model_name=getattr(settings, "GEMINI_MODEL", "gemini-2.5-flash"),
             status="uploaded",

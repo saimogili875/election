@@ -1,13 +1,13 @@
 {% extends "wardapp/base.html" %}
 
-{% block title %}Upload Audio - Ward 119 Survey AI{% endblock %}
+{% block title %}Upload / Ingest Interview - Ward 119 Survey AI{% endblock %}
 
 {% block content %}
-<div style="max-width: 800px; margin: 0 auto;">
-  <div style="margin-bottom: 2rem;">
-    <h1 style="font-size: 1.85rem; font-weight: 700;">New Interview Run</h1>
+<div style="max-width: 850px; margin: 0 auto;">
+  <div style="margin-bottom: 1.5rem;">
+    <h1 style="font-size: 1.85rem; font-weight: 700;">New Interview Ingestion</h1>
     <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.35rem;">
-      Upload Telugu field interview audio. Gemini will stream the faithful transcript and extract civic problem rows live into the sheet.
+      Upload Telugu interview audio <strong>OR</strong> directly paste your transcribed field notes to extract structured problem rows into the live sheet.
     </p>
   </div>
 
@@ -17,28 +17,55 @@
     </div>
   {% endif %}
 
+  <!-- Mode Selector Tabs -->
+  <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem;">
+    <button type="button" id="tab-audio-btn" class="btn btn-secondary" onclick="switchMode('audio')" style="flex: 1; justify-content: center; border-bottom: 3px solid transparent;">
+      🎙️ Upload Audio Recording
+    </button>
+    <button type="button" id="tab-text-btn" class="btn btn-primary" onclick="switchMode('text')" style="flex: 1; justify-content: center; border-bottom: 3px solid #60a5fa;">
+      📝 Paste Telugu Transcript / Notes (No Audio Needed)
+    </button>
+  </div>
+
   <div class="card">
     <form method="POST" enctype="multipart/form-data" id="uploadForm">
       {% csrf_token %}
+      <input type="hidden" name="input_mode" id="input_mode" value="text">
 
-      <!-- Drag & Drop Audio Upload Zone -->
-      <div class="form-group">
-        <label class="form-label">Audio File (MP3, WAV, M4A) *</label>
+      <!-- SECTION 1: Audio Upload (Shown in audio mode) -->
+      <div id="audio-input-section" style="display: none;" class="form-group">
+        <label class="form-label">Audio File (MP3, WAV, M4A)</label>
         <div class="dropzone" id="dropzone" onclick="document.getElementById('audio_file').click()">
           <div class="dropzone-icon">🎙️</div>
           <div style="font-weight: 600; font-size: 1.05rem;" id="dropzone-text">Click or Drag & Drop Audio File Here</div>
-          <p style="color: var(--text-muted); font-size: 0.825rem; margin-top: 0.35rem;">Supports .mp3, .wav, .m4a audio recordings</p>
+          <p style="color: var(--text-muted); font-size: 0.825rem; margin-top: 0.35rem;">Supports .mp3, .wav, .m4a field recordings</p>
           <div id="file-chosen" style="margin-top: 0.75rem; color: #60a5fa; font-weight: 600; display: none;"></div>
         </div>
-        <input type="file" id="audio_file" name="audio_file" accept=".mp3,.wav,.m4a,audio/*" style="display: none;" required onchange="handleFileSelected(this.files)">
+        <input type="file" id="audio_file" name="audio_file" accept=".mp3,.wav,.m4a,audio/*" style="display: none;" onchange="handleFileSelected(this.files)">
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <!-- SECTION 2: Text / Transcript Paste (Shown in text mode) -->
+      <div id="text-input-section" class="form-group">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+          <label class="form-label" for="pasted_transcript" style="margin-bottom: 0;">Telugu Transcript / Field Q&A Notes *</label>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="loadSampleWardNotes()" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">
+            📋 Load Ward 119 Sample Notes
+          </button>
+        </div>
+        <textarea id="pasted_transcript" name="pasted_transcript" class="form-control telugu-text" rows="10" placeholder="Paste the Telugu Q&A interview text here... (e.g. ## 1. అంజయ్య నగర్ & జయశంకర్ నగర్&#10;ప్రశ్న ...&#10;జవాబు ...)"></textarea>
+        
+        <div style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Or upload a .txt notes file:</span>
+          <input type="file" name="transcript_file" id="transcript_file" accept=".txt,.md" style="font-size: 0.8rem; color: #cbd5e1;">
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.25rem;">
         <!-- Area Selection -->
         <div class="form-group">
-          <label class="form-label" for="area">Colony / Area *</label>
-          <select id="area" name="area" class="form-select telugu-text" required>
-            <option value="">-- Select Colony in Ward 119 --</option>
+          <label class="form-label" for="area">Colony / Area</label>
+          <select id="area" name="area" class="form-select telugu-text">
+            <option value="">-- All Colonies / Auto-Detect --</option>
             {% for a in areas %}
               <option value="{{ a.id }}">{{ a.name }}</option>
             {% endfor %}
@@ -59,8 +86,8 @@
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
         <!-- Speaker Name -->
         <div class="form-group">
-          <label class="form-label" for="speaker_name">Speaker Name *</label>
-          <input type="text" id="speaker_name" name="speaker_name" class="form-control telugu-text" placeholder="e.g. సురేష్ కుమార్ / Suresh Kumar" required>
+          <label class="form-label" for="speaker_name">Speaker Name / Source</label>
+          <input type="text" id="speaker_name" name="speaker_name" class="form-control telugu-text" placeholder="e.g. వార్డ్ 119 సర్వే / Suresh Kumar" value="వార్డ్ 119 ఫీల్డ్ సర్వే">
         </div>
 
         <!-- Speaker Phone -->
@@ -72,7 +99,7 @@
 
       <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
         <button type="submit" id="submitBtn" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 1rem;">
-          🚀 Start Live Run
+          🚀 Start Extraction & Live Sheet
         </button>
       </div>
     </form>
@@ -88,7 +115,7 @@
             <div>
               <span class="telugu-text" style="font-weight: 600; font-size: 1.05rem;">{{ item.speaker_name }}</span>
               <span style="color: var(--text-muted); font-size: 0.85rem; margin-left: 0.5rem;">
-                ({{ item.area.name|default:"Unknown Area" }})
+                ({{ item.area.name|default:"All Ward 119 Colonies" }})
               </span>
               <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">
                 Status: <span class="badge-{% if item.status == 'done' %}green{% elif item.status == 'failed' %}red{% else %}yellow{% endif %}">{{ item.status|upper }}</span>
@@ -97,6 +124,7 @@
             </div>
             <div style="display: flex; gap: 0.5rem;">
               <a href="/run/{{ item.id }}/" class="btn btn-secondary btn-sm">Live Run</a>
+              <a href="/sheet/?interview={{ item.id }}" class="btn btn-secondary btn-sm">Sheet</a>
               <a href="/review/{{ item.id }}/" class="btn btn-primary btn-sm">Review (✓/✗)</a>
             </div>
           </div>
@@ -109,10 +137,73 @@
 
 {% block extra_scripts %}
 <script>
+  const audioSec = document.getElementById('audio-input-section');
+  const textSec = document.getElementById('text-input-section');
+  const tabAudioBtn = document.getElementById('tab-audio-btn');
+  const tabTextBtn = document.getElementById('tab-text-btn');
+  const inputModeInput = document.getElementById('input_mode');
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('audio_file');
   const fileChosen = document.getElementById('file-chosen');
   const dropzoneText = document.getElementById('dropzone-text');
+
+  function switchMode(mode) {
+    inputModeInput.value = mode;
+    if (mode === 'audio') {
+      audioSec.style.display = 'block';
+      textSec.style.display = 'none';
+      tabAudioBtn.className = 'btn btn-primary';
+      tabAudioBtn.style.borderBottom = '3px solid #60a5fa';
+      tabTextBtn.className = 'btn btn-secondary';
+      tabTextBtn.style.borderBottom = '3px solid transparent';
+      fileInput.required = true;
+    } else {
+      audioSec.style.display = 'none';
+      textSec.style.display = 'block';
+      tabTextBtn.className = 'btn btn-primary';
+      tabTextBtn.style.borderBottom = '3px solid #60a5fa';
+      tabAudioBtn.className = 'btn btn-secondary';
+      tabAudioBtn.style.borderBottom = '3px solid transparent';
+      fileInput.required = false;
+    }
+  }
+
+  // Pre-fill sample Ward 119 Telugu interview notes
+  function loadSampleWardNotes() {
+    const sample = `## 1. అంజయ్య నగర్ & జయశంకర్ నగర్
+
+ప్రశ్న అంజయ్య నగర్ కాలనీలో జిహెచ్ఎంసి వర్కర్ల పనితీరు ఎలా ఉంది?
+
+జవాబు అంజయ్య నగర్ కాలనీలో జిహెచ్ఎంసి వర్కర్లు డ్రైనేజీలు శుభ్రపరచి మట్టిని అలాగే వదిలేయడం వల్ల సరిగ్గా పట్టించుకోవడంలేదని భావిస్తున్నారు.
+
+ప్రశ్న డ్రైనేజీ మట్టి విషయంలో వర్కర్ల గురించి ప్రజలు ఏమంటున్నారు?
+
+జవాబు అంజయ్య నగర్ కాలనీలో జిహెచ్ఎంసి వర్కర్స్ చెత్త మరియు డ్రైనేజీలు శుభ్రపరచిన తర్వాత మట్టిని అలాగే వదిలేస్తున్నారు. ఆ మట్టిని తీసేయుటకు డబ్బులు డిమాండ్ చేస్తున్నారు. ఈ విధానాన్ని తగ్గించాలని ప్రజలు కోరుకుంటున్నారు.
+
+ప్రశ్న దోబీ ఘాట్ దగ్గర ఉన్న ఖాళీ స్థలం గురించి ప్రజలు ఏమనుకుంటున్నారు?
+
+జవాబు అంజయ్య నగర్ కాలనీలో దోబీ ఘాట్ దగ్గర ఉన్న ఖాళీ స్థలాన్ని ఒక గ్రౌండ్ మరియు పార్క్ నిర్మాణం చేయిస్తానని మాట ఇచ్చి పూర్తి చేయలేదని భావనలో ప్రజలు ఉన్నారు. త్వరగా పూర్తి చేయడం వల్ల ప్రజల్లో అనుకూలత వస్తుంది.
+
+ప్రశ్న డంప్ యార్డ్ వల్ల కాలనీవాసులకు ఎలాంటి ఇబ్బందులు ఉన్నాయి?
+
+జవాబు జయశంకర్ నగర్ కాలనీ కమాన్ పక్కన మరియు అంజయ్య నగర్ లోని Divyagen వద్ద గల డంప్ యార్డ్ లో నిత్యం చెత్త తొలగించకపోవడం వల్ల కాలుష్యం పెరిగి దుర్గంధం తో పాటు దోమల బెడద వల్ల కాలనీవాసులు తీవ్ర ఇబ్బందులకు గురవుతున్నారు. కావున ఆ యొక్క చెత్తను తరచూ శుభ్రం చేయడం వల్ల అక్కడి ప్రజల అభిమానాన్ని పొందవచ్చు.
+
+## 2. మనోవికాస్ నగర్, అబ్రార్ నగర్, షేర్ గల్లి, దుబాయ్ గేట్ లైన్, పంచశీల నగర్, సిండికేట్ బ్యాంక్ ఆఫీసర్స్ కాలనీ
+
+ప్రశ్న మనోవికాస్ నగర్ లో డంపింగ్ యార్డ్ వల్ల ఏమి జరుగుతోంది?
+
+జవాబు మనోవికాస్ నగర్ లో డంపింగ్ యార్డ్ నుంచి దుర్వాసన మరియు దోమల బెడద వల్ల ప్రజలు తీవ్ర ఇబ్బందులకు గురవుతున్నారు. ఎన్నిసార్లు కంప్లైంట్ చేసినా అధికారులు పట్టించుకోవడంలేదని ప్రజలు అసహనానికి గురవుతున్నారు. తక్షణమే స్పందించి కార్పొరేటర్ గారు దీనిని సందర్శించి తక్షణ చర్యలు తీసుకొని ఈ సమస్య పరిష్కారం పై ప్రజలలో భరోసా కల్పించాలి.
+
+ప్రశ్న సాయన్న గారి ఇంటి దగ్గర రోడ్లలో ఏ సమస్య ఉంది?
+
+జవాబు మనోవికాస్ నగర్ పరిధిలోని కంటోన్మెంట్ మాజీ ఎమ్మెల్యే సాయన్న గారి ఇంటికి ఆపోజిట్ లైన్ రోడ్లలో స్ట్రీట్ లైట్ లేకపోవడంతో ఆ ఏరియా ప్రజలు ఇబ్బందులకు గురవుతున్నారు.
+
+ప్రశ్న అబ్రార్ నగర్ లో వీధి కుక్కల పరిస్థితి ఎలా ఉంది?
+
+జవాబు అబ్రార్ నగర్ లో వీధి కుక్కల బెడద ఎక్కువగా ఉన్నది. వాటిని బ్లూ క్రాస్ వాళ్లకి అప్పగించేలా చర్యలు తీసుకొని కుక్కల దాడుల నుండి రక్షణ కల్పించాలి.`;
+
+    document.getElementById('pasted_transcript').value = sample;
+  }
 
   ['dragenter', 'dragover'].forEach(eventName => {
     dropzone.addEventListener(eventName, (e) => {
