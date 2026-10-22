@@ -388,40 +388,86 @@ def api_row_update(request, row_id):
 
 def export_sheet_csv(request):
     """Exports sheet rows as CSV with UTF-8 BOM for Microsoft Excel compatibility."""
+    interview_filter = request.GET.get("interview", "")
+    area_filter = request.GET.get("area", "")
+    speaker_filter = request.GET.get("speaker", "")
+
+    rows = Row.objects.select_related("interview", "area").all()
+    if interview_filter:
+        rows = rows.filter(interview_id=interview_filter)
+    if area_filter:
+        rows = rows.filter(area_id=area_filter)
+    if speaker_filter:
+        rows = rows.filter(speaker_name__icontains=speaker_filter)
+
+    rows = rows.order_by("category", "sub_category", "order_no")
+
+    filename_suffix = f"interview_{interview_filter}" if interview_filter else "all"
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = (
-        f'attachment; filename="ward119_civic_sheet_{timezone.now().strftime("%Y%m%d_%H%M")}.csv"'
+        f'attachment; filename="ward119_civic_sheet_{filename_suffix}_{timezone.now().strftime("%Y%m%d_%H%M")}.csv"'
     )
 
-    # Write UTF-8 BOM so Excel opens Telugu text correctly
+    # Write UTF-8 BOM so Excel opens Telugu text correctly without garbled symbols
     response.write("\ufeff".encode("utf-8"))
 
-    writer = csv.writer(response)
+    writer = csv.writer(response, quoting=csv.QUOTE_MINIMAL)
     header = [
         "Category",
         "Sub-category",
         "Speaker Name",
         "Speaker Phone",
-        "Area",
-        "Source Quote",
+        "Area / Colony",
+        "Where Details",
+        "What is happening",
+        "Why (Root Cause)",
+        "To People",
+        "How it happens",
+        "Solution",
+        "Solution Impact",
+        "Voter Impact",
+        "+ done",
+        "- not done",
+        "Urgency (1-5)",
+        "Scale",
+        "Responsible Dept & Official",
+        "Key Influencer / Contact",
+        "Law / Authority Route",
+        "Work Done?",
+        "Past Complaint Given?",
         "Source Time",
-    ] + [FIELD_LABELS[f] for f in CELL_FIELDS]
+        "Source Quote",
+    ]
     writer.writerow(header)
 
-    rows = Row.objects.select_related("interview", "area").all().order_by(
-        "category", "sub_category", "order_no"
-    )
     for r in rows:
-        area_name = r.area.name if r.area else ""
+        area_name = r.area.name if r.area else (r.where if r.where else "Ward 119")
         row_vals = [
             r.category,
             r.sub_category,
             r.speaker_name,
             r.speaker_phone,
             area_name,
-            r.source_quote,
+            r.where,
+            r.what,
+            r.why,
+            r.to_people,
+            r.how,
+            r.solution,
+            r.solution_impact,
+            r.voter_impact,
+            r.vote_plus,
+            r.vote_minus,
+            r.urgency,
+            r.scale,
+            r.dept_official,
+            r.influencer,
+            r.law_route,
+            r.work_done,
+            r.past_complaint,
             r.source_time,
-        ] + [getattr(r, f) for f in CELL_FIELDS]
+            r.source_quote,
+        ]
         writer.writerow(row_vals)
 
     return response
