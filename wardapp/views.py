@@ -16,10 +16,12 @@ from .constants import (
     REVIEW_REASONS,
 )
 from .models import Area, CellReview, Interview, PromptVersion, Row, RunLog
-from .pipeline.extract import stream_extract_rows
-from .pipeline.sse import sse_comment, sse_message
-from .pipeline.transcribe import stream_transcribe
-from .pipeline.validator import validate_cell
+from pipeline import transcribe
+from pipeline.extract import stream_extract_rows
+from pipeline.sse import sse_comment, sse_message
+from pipeline.validator import validate_cell
+import queue
+import threading
 
 
 # ---------------------------------------------------------
@@ -162,14 +164,59 @@ def live_run_stream(request, interview_id):
             return
 
         try:
-            # STEP 1: Transcribe
+            # STEP 1: Transcribe via contract
             if not interview.transcript:
                 interview.status = "transcribing"
                 interview.save(update_fields=["status"])
                 yield sse_message("status", {"status": "transcribing"})
 
-                for chunk in stream_transcribe(interview):
-                    yield sse_message("transcript_chunk", {"text": chunk})
+                log = RunLog.objects.create(
+                    interview=interview,
+                    step="transcribe",
+                    started_at=timezone.now(),
+                    message="Starting transcription stream"
+                )
+
+                chunk_queue = queue.Queue()
+
+                def on_chunk(chunk_text):
+                    chunk_queue.put(('CHUNK', chunk_text))
+
+                def run_transcribe_worker():
+                    try:
+                        res = transcribe(
+                            audio_path=interview.audio_file.path if interview.audio_file else "",
+                            speaker_hint=interview.speaker_name,
+                            on_chunk=on_chunk
+                        )
+                        chunk_queue.put(('DONE', res))
+                    except Exception as exc:
+                        chunk_queue.put(('ERROR', exc))
+
+                worker_thread = threading.Thread(target=run_transcribe_worker, daemon=True)
+                worker_thread.start()
+
+                while True:
+                    msg_type, payload = chunk_queue.get()
+                    if msg_type == 'CHUNK':
+                        yield sse_message("transcript_chunk", {"text": payload})
+                    elif msg_type == 'DONE':
+                        transcript_res = payload
+                        interview.transcript = transcript_res.text
+                        interview.raw_transcript_response = transcript_res.raw_response
+                        interview.save(update_fields=["transcript", "raw_transcript_response"])
+
+                        log.ended_at = timezone.now()
+                        log.tokens_in = transcript_res.tokens_in
+                        log.tokens_out = transcript_res.tokens_out
+                        log.message = f"Transcription finished ({transcript_res.model}, latency: {transcript_res.latency_seconds}s)"
+                        log.save()
+                        break
+                    elif msg_type == 'ERROR':
+                        log.ended_at = timezone.now()
+                        log.message = f"Transcription failed: {str(payload)}"
+                        log.save()
+                        raise payload
 
             # STEP 2: Extract
             interview.status = "extracting"

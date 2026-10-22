@@ -5,8 +5,8 @@ import time
 from typing import Generator, Dict, Any, List, Optional
 from django.conf import settings
 from django.utils import timezone
-from ..models import Interview, Row, RunLog
-from ..constants import CELL_FIELDS
+from wardapp.models import Interview, Row, RunLog
+from wardapp.constants import CELL_FIELDS
 
 MOCK_EXTRACTED_PROBLEMS = [
     {

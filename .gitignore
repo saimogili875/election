@@ -33,6 +33,18 @@ staticfiles/
 
 # Environment variables
 .env
+*.env
+
+# Audio recordings & notes
+*.mp3
+*.wav
+*.m4a
+*.docx
+Untitled.docx
+media/
+media/**
+cases/
+tests/transcribe_eval/
 
 # macOS
 .DS_Store

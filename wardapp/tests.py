@@ -1,6 +1,7 @@
 from django.test import TestCase
-from wardapp.pipeline.extract import parse_incremental_json_objects, sanitize_json_response
-from wardapp.pipeline.validator import check_invented_words, check_missing_info, validate_cell
+from pipeline.extract import parse_incremental_json_objects, sanitize_json_response
+from pipeline.validator import check_invented_words, check_missing_info, validate_cell
+from pipeline import transcribe, TranscriptResult
 
 class JSONParserTests(TestCase):
     def test_parse_incremental_chunks(self):
@@ -153,4 +154,19 @@ class ViewAndExportTests(TestCase):
         data = response.json()
         self.assertEqual(data["speaker_name"], "సురేష్ కుమార్")
         self.assertEqual(len(data["rows"]), 1)
+
+
+class TranscribeContractTests(TestCase):
+    def test_transcribe_stub_contract(self):
+        chunks = []
+        def on_chunk(chunk):
+            chunks.append(chunk)
+
+        result = transcribe("dummy_audio.mp3", speaker_hint="సురేష్", on_chunk=on_chunk)
+        self.assertIsInstance(result, TranscriptResult)
+        self.assertTrue(result.text.startswith("[STUB RUN]"))
+        self.assertTrue(len(chunks) > 0)
+        self.assertTrue(len(result.segments) > 0)
+        self.assertEqual(result.segments[0].speaker, "సురేష్")
+
 
