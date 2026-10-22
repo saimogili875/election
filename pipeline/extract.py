@@ -428,7 +428,23 @@ def stream_extract_rows(interview: Interview) -> Generator[Dict[str, Any], None,
                         accumulated_chunks.append(t)
                         yield t
 
+                seen_row_keys = set()
                 for parsed_obj in parse_incremental_json_objects(chunk_generator()):
+                    what_val = (parsed_obj.get("what") or "").strip()
+                    if not what_val:
+                        continue
+
+                    # Deduplication key to prevent repeated identical rows within same run
+                    dedup_key = (
+                        (parsed_obj.get("category") or "").strip().lower(),
+                        (parsed_obj.get("sub_category") or "").strip().lower(),
+                        re.sub(r"\s+", " ", (parsed_obj.get("where") or "").strip().lower()),
+                        re.sub(r"\s+", " ", what_val.lower()),
+                    )
+                    if dedup_key in seen_row_keys:
+                        continue
+                    seen_row_keys.add(dedup_key)
+
                     row = Row.objects.create(
                         interview=interview,
                         area=interview.area,
@@ -465,6 +481,19 @@ def stream_extract_rows(interview: Interview) -> Generator[Dict[str, Any], None,
                 if len(extracted_rows) == 0:
                     fallback_items = sanitize_json_response(raw_full_text)
                     for item in fallback_items:
+                        what_val = (item.get("what") or "").strip()
+                        if not what_val:
+                            continue
+
+                        dedup_key = (
+                            (item.get("category") or "").strip().lower(),
+                            (item.get("sub_category") or "").strip().lower(),
+                            re.sub(r"\s+", " ", (item.get("where") or "").strip().lower()),
+                            re.sub(r"\s+", " ", what_val.lower()),
+                        )
+                        if dedup_key in seen_row_keys:
+                            continue
+                        seen_row_keys.add(dedup_key)
                         row = Row.objects.create(
                             interview=interview,
                             area=interview.area,

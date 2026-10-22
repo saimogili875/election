@@ -448,6 +448,8 @@ def export_sheet_csv(request):
 
     writer = csv.writer(response, quoting=csv.QUOTE_MINIMAL)
     header = [
+        "#",
+        "Run ID",
         "Category",
         "Sub-category",
         "Speaker Name",
@@ -475,33 +477,42 @@ def export_sheet_csv(request):
     ]
     writer.writerow(header)
 
+    def safe_cell(val):
+        s = str(val or "")
+        # Prevent formula injection in Excel for cells starting with '=' or '@'
+        if s.startswith(("=", "@")):
+            return "'" + s
+        return s
+
     for r in rows:
         area_name = r.area.name if r.area else (r.where if r.where else "Ward 119")
         row_vals = [
-            r.category,
-            r.sub_category,
-            r.speaker_name,
-            r.speaker_phone,
-            area_name,
-            r.where,
-            r.what,
-            r.why,
-            r.to_people,
-            r.how,
-            r.solution,
-            r.solution_impact,
-            r.voter_impact,
-            r.vote_plus,
-            r.vote_minus,
-            r.urgency,
-            r.scale,
-            r.dept_official,
-            r.influencer,
-            r.law_route,
-            r.work_done,
-            r.past_complaint,
-            r.source_time,
-            r.source_quote,
+            r.order_no,
+            r.interview_id,
+            safe_cell(r.category),
+            safe_cell(r.sub_category),
+            safe_cell(r.speaker_name),
+            safe_cell(r.speaker_phone),
+            safe_cell(area_name),
+            safe_cell(r.where),
+            safe_cell(r.what),
+            safe_cell(r.why),
+            safe_cell(r.to_people),
+            safe_cell(r.how),
+            safe_cell(r.solution),
+            safe_cell(r.solution_impact),
+            safe_cell(r.voter_impact),
+            safe_cell(r.vote_plus),
+            safe_cell(r.vote_minus),
+            safe_cell(r.urgency),
+            safe_cell(r.scale),
+            safe_cell(r.dept_official),
+            safe_cell(r.influencer),
+            safe_cell(r.law_route),
+            safe_cell(r.work_done),
+            safe_cell(r.past_complaint),
+            safe_cell(r.source_time),
+            safe_cell(r.source_quote),
         ]
         writer.writerow(row_vals)
 
