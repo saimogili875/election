@@ -142,12 +142,14 @@ def live_run_stream(request, interview_id):
     """
     interview = get_object_or_404(Interview, id=interview_id)
 
+    is_retry = request.GET.get("retry") == "1" or request.GET.get("retry") == "true"
+
     def event_stream():
         # Heartbeat initial message
         yield sse_comment("connected")
 
-        # If already done or failed, push existing state and close
-        if interview.status in ("done", "failed"):
+        # If already successfully done and not explicitly retrying, push existing state and close
+        if interview.status == "done" and not is_retry:
             yield sse_message(
                 "status",
                 {
@@ -176,6 +178,13 @@ def live_run_stream(request, interview_id):
                 },
             )
             return
+
+        # If failed or retrying, clean any partial rows and reset error
+        if interview.status == "failed" or is_retry:
+            interview.rows.all().delete()
+            interview.error = ""
+            interview.status = "extracting"
+            interview.save(update_fields=["error", "status"])
 
         try:
             # STEP 1: Transcribe via contract

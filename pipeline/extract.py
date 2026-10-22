@@ -385,141 +385,209 @@ def stream_extract_rows(interview: Interview) -> Generator[Dict[str, Any], None,
         run_log.save()
         return extracted_rows
 
-    # Real Gemini execution with retry
-    retries = 1
+    # Real Gemini execution with multi-model fallback and retry
+    models_to_try = [
+        model_name,
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash-lite",
+    ]
     last_error = None
     accumulated_chunks = []
+    gemini_succeeded = False
 
-    for attempt in range(retries + 1):
-        try:
-            from google import genai
-            from google.genai import types
+    from google import genai
+    from google.genai import types
 
-            client = genai.Client(api_key=api_key)
+    client = genai.Client(api_key=api_key)
 
-            user_content = (
-                f"Extract structured problem rows from this Telugu interview transcript:\n\n"
-                f"{interview.transcript}"
-            )
+    user_content = (
+        f"Extract structured problem rows from this Telugu interview transcript:\n\n"
+        f"{interview.transcript}"
+    )
 
-            response_stream = client.models.generate_content_stream(
-                model=model_name,
-                contents=user_content,
-                config=types.GenerateContentConfig(
-                    system_instruction=full_system_instruction,
-                    response_mime_type="application/json",
-                    temperature=0.2,
+    for target_model in models_to_try:
+        if gemini_succeeded:
+            break
+        for attempt in range(2):
+            try:
+                response_stream = client.models.generate_content_stream(
+                    model=target_model,
+                    contents=user_content,
+                    config=types.GenerateContentConfig(
+                        system_instruction=full_system_instruction,
+                        response_mime_type="application/json",
+                        temperature=0.2,
+                    ),
                 )
-            )
 
-            def chunk_generator():
-                for chunk in response_stream:
-                    t = chunk.text or ""
-                    accumulated_chunks.append(t)
-                    yield t
+                def chunk_generator():
+                    for chunk in response_stream:
+                        t = chunk.text or ""
+                        accumulated_chunks.append(t)
+                        yield t
 
-            for parsed_obj in parse_incremental_json_objects(chunk_generator()):
-                row = Row.objects.create(
-                    interview=interview,
-                    area=interview.area,
-                    speaker_name=interview.speaker_name,
-                    speaker_phone=interview.speaker_phone,
-                    category=parsed_obj.get('category', 'Other'),
-                    sub_category=parsed_obj.get('sub_category', 'General'),
-                    order_no=order_no,
-                    source_quote=parsed_obj.get('source_quote', ''),
-                    source_time=parsed_obj.get('source_time', ''),
-                    where=parsed_obj.get('where', ''),
-                    what=parsed_obj.get('what', ''),
-                    why=parsed_obj.get('why', ''),
-                    to_people=parsed_obj.get('to_people', ''),
-                    how=parsed_obj.get('how', ''),
-                    solution=parsed_obj.get('solution', ''),
-                    solution_impact=parsed_obj.get('solution_impact', ''),
-                    voter_impact=parsed_obj.get('voter_impact', ''),
-                    vote_plus=parsed_obj.get('vote_plus', ''),
-                    vote_minus=parsed_obj.get('vote_minus', ''),
-                    urgency=parsed_obj.get('urgency', ''),
-                    scale=parsed_obj.get('scale', ''),
-                    dept_official=parsed_obj.get('dept_official', ''),
-                    influencer=parsed_obj.get('influencer', ''),
-                    law_route=parsed_obj.get('law_route', ''),
-                    work_done=parsed_obj.get('work_done', ''),
-                    past_complaint=parsed_obj.get('past_complaint', '')
-                )
-                order_no += 1
-                extracted_rows.append(row)
-                yield {'type': 'row_created', 'row': row, 'data': parsed_obj}
-
-            # If incremental missed any objects due to format quirks, try fallback sanitize
-            raw_full_text = "".join(accumulated_chunks)
-            interview.raw_extract_response = raw_full_text
-            
-            if len(extracted_rows) == 0:
-                fallback_items = sanitize_json_response(raw_full_text)
-                for item in fallback_items:
+                for parsed_obj in parse_incremental_json_objects(chunk_generator()):
                     row = Row.objects.create(
                         interview=interview,
                         area=interview.area,
                         speaker_name=interview.speaker_name,
                         speaker_phone=interview.speaker_phone,
-                        category=item.get('category', 'Other'),
-                        sub_category=item.get('sub_category', 'General'),
+                        category=parsed_obj.get("category", "Other"),
+                        sub_category=parsed_obj.get("sub_category", "General"),
                         order_no=order_no,
-                        source_quote=item.get('source_quote', ''),
-                        source_time=item.get('source_time', ''),
-                        where=item.get('where', ''),
-                        what=item.get('what', ''),
-                        why=item.get('why', ''),
-                        to_people=item.get('to_people', ''),
-                        how=item.get('how', ''),
-                        solution=item.get('solution', ''),
-                        solution_impact=item.get('solution_impact', ''),
-                        voter_impact=item.get('voter_impact', ''),
-                        vote_plus=item.get('vote_plus', ''),
-                        vote_minus=item.get('vote_minus', ''),
-                        urgency=item.get('urgency', ''),
-                        scale=item.get('scale', ''),
-                        dept_official=item.get('dept_official', ''),
-                        influencer=item.get('influencer', ''),
-                        law_route=item.get('law_route', ''),
-                        work_done=item.get('work_done', ''),
-                        past_complaint=item.get('past_complaint', '')
+                        source_quote=parsed_obj.get("source_quote", ""),
+                        source_time=parsed_obj.get("source_time", ""),
+                        where=parsed_obj.get("where", ""),
+                        what=parsed_obj.get("what", ""),
+                        why=parsed_obj.get("why", ""),
+                        to_people=parsed_obj.get("to_people", ""),
+                        how=parsed_obj.get("how", ""),
+                        solution=parsed_obj.get("solution", ""),
+                        solution_impact=parsed_obj.get("solution_impact", ""),
+                        voter_impact=parsed_obj.get("voter_impact", ""),
+                        vote_plus=parsed_obj.get("vote_plus", ""),
+                        vote_minus=parsed_obj.get("vote_minus", ""),
+                        urgency=parsed_obj.get("urgency", ""),
+                        scale=parsed_obj.get("scale", ""),
+                        dept_official=parsed_obj.get("dept_official", ""),
+                        influencer=parsed_obj.get("influencer", ""),
+                        law_route=parsed_obj.get("law_route", ""),
+                        work_done=parsed_obj.get("work_done", ""),
+                        past_complaint=parsed_obj.get("past_complaint", ""),
                     )
                     order_no += 1
                     extracted_rows.append(row)
-                    yield {'type': 'row_created', 'row': row, 'data': item}
+                    yield {"type": "row_created", "row": row, "data": parsed_obj}
 
-            interview.status = 'done'
-            interview.finished_at = timezone.now()
-            interview.save(update_fields=['raw_extract_response', 'status', 'finished_at'])
+                raw_full_text = "".join(accumulated_chunks)
+                if len(extracted_rows) == 0:
+                    fallback_items = sanitize_json_response(raw_full_text)
+                    for item in fallback_items:
+                        row = Row.objects.create(
+                            interview=interview,
+                            area=interview.area,
+                            speaker_name=interview.speaker_name,
+                            speaker_phone=interview.speaker_phone,
+                            category=item.get("category", "Other"),
+                            sub_category=item.get("sub_category", "General"),
+                            order_no=order_no,
+                            source_quote=item.get("source_quote", ""),
+                            source_time=item.get("source_time", ""),
+                            where=item.get("where", ""),
+                            what=item.get("what", ""),
+                            why=item.get("why", ""),
+                            to_people=item.get("to_people", ""),
+                            how=item.get("how", ""),
+                            solution=item.get("solution", ""),
+                            solution_impact=item.get("solution_impact", ""),
+                            voter_impact=item.get("voter_impact", ""),
+                            vote_plus=item.get("vote_plus", ""),
+                            vote_minus=item.get("vote_minus", ""),
+                            urgency=item.get("urgency", ""),
+                            scale=item.get("scale", ""),
+                            dept_official=item.get("dept_official", ""),
+                            influencer=item.get("influencer", ""),
+                            law_route=item.get("law_route", ""),
+                            work_done=item.get("work_done", ""),
+                            past_complaint=item.get("past_complaint", ""),
+                        )
+                        order_no += 1
+                        extracted_rows.append(row)
+                        yield {"type": "row_created", "row": row, "data": item}
 
-            run_log.ended_at = timezone.now()
-            run_log.message = f"Successfully extracted {len(extracted_rows)} rows"
-            run_log.save()
-            return extracted_rows
+                if len(extracted_rows) > 0:
+                    interview.raw_extract_response = raw_full_text
+                    interview.model_name = target_model
+                    interview.status = "done"
+                    interview.error = ""
+                    interview.finished_at = timezone.now()
+                    interview.save(update_fields=["raw_extract_response", "model_name", "status", "error", "finished_at"])
 
-        except Exception as e:
-            last_error = e
-            time.sleep(1)
+                    run_log.ended_at = timezone.now()
+                    run_log.message = f"Successfully extracted {len(extracted_rows)} rows via {target_model}"
+                    run_log.save()
+                    gemini_succeeded = True
+                    return extracted_rows
+
+            except Exception as e:
+                last_error = e
+                # If high demand 503 or 429, pause before retry or fallback
+                time.sleep(2 * (attempt + 1))
 
     raw_full_text = "".join(accumulated_chunks)
     if len(extracted_rows) > 0:
         interview.raw_extract_response = raw_full_text
-        interview.status = 'done'
+        interview.status = "done"
+        interview.error = ""
         interview.finished_at = timezone.now()
-        interview.save(update_fields=['raw_extract_response', 'status', 'finished_at'])
+        interview.save(update_fields=["raw_extract_response", "status", "error", "finished_at"])
         run_log.ended_at = timezone.now()
-        run_log.message = f"Stream ended with partial exception, but saved {len(extracted_rows)} Gemini extracted rows."
+        run_log.message = f"Stream completed with partial exception, but saved {len(extracted_rows)} Gemini extracted rows."
         run_log.save()
         return extracted_rows
+
+    # Fallback to local Telugu QA parser so the user NEVER gets stuck with 0 rows
+    if interview.transcript and len(interview.transcript.strip()) > 30:
+        run_log.message = f"Gemini temporarily unavailable ({last_error}); parsing structured problems from Telugu transcript"
+        run_log.save()
+
+        parsed_problems = extract_qa_problems_from_text(
+            interview.transcript,
+            interview.area.name if interview.area else ""
+        )
+        for problem in parsed_problems:
+            row = Row.objects.create(
+                interview=interview,
+                area=interview.area,
+                speaker_name=interview.speaker_name,
+                speaker_phone=interview.speaker_phone,
+                category=problem.get("category", "Other"),
+                sub_category=problem.get("sub_category", "General"),
+                order_no=order_no,
+                source_quote=problem.get("source_quote", ""),
+                source_time=problem.get("source_time", ""),
+                where=problem.get("where", ""),
+                what=problem.get("what", ""),
+                why=problem.get("why", ""),
+                to_people=problem.get("to_people", ""),
+                how=problem.get("how", ""),
+                solution=problem.get("solution", ""),
+                solution_impact=problem.get("solution_impact", ""),
+                voter_impact=problem.get("voter_impact", ""),
+                vote_plus=problem.get("vote_plus", ""),
+                vote_minus=problem.get("vote_minus", ""),
+                urgency=problem.get("urgency", ""),
+                scale=problem.get("scale", ""),
+                dept_official=problem.get("dept_official", ""),
+                influencer=problem.get("influencer", ""),
+                law_route=problem.get("law_route", ""),
+                work_done=problem.get("work_done", ""),
+                past_complaint=problem.get("past_complaint", ""),
+            )
+            order_no += 1
+            extracted_rows.append(row)
+            yield {"type": "row_created", "row": row, "data": problem}
+
+        if len(extracted_rows) > 0:
+            interview.raw_extract_response = json.dumps(parsed_problems, ensure_ascii=False, indent=2)
+            interview.status = "done"
+            interview.error = ""
+            interview.finished_at = timezone.now()
+            interview.save(update_fields=["raw_extract_response", "status", "error", "finished_at"])
+
+            run_log.ended_at = timezone.now()
+            run_log.message = f"Extracted {len(extracted_rows)} rows from Telugu transcript (LLM was busy: {last_error})"
+            run_log.save()
+            return extracted_rows
 
     err_msg = f"Extraction failed: {str(last_error)}"
     interview.raw_extract_response = raw_full_text
     interview.error = err_msg
-    interview.status = 'failed'
+    interview.status = "failed"
     interview.finished_at = timezone.now()
-    interview.save(update_fields=['raw_extract_response', 'error', 'status', 'finished_at'])
+    interview.save(update_fields=["raw_extract_response", "error", "status", "finished_at"])
 
     run_log.ended_at = timezone.now()
     run_log.message = err_msg
