@@ -1,0 +1,301 @@
+{% extends "wardapp/base.html" %}
+
+{% block title %}Review Interview #{{ interview.id }} - Ward 119 Survey AI{% endblock %}
+
+{% block content %}
+<!-- Top Header & Summary Stats -->
+<div style="margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <h1 style="font-size: 1.75rem; font-weight: 700;">Review & Validation #{{ interview.id }}</h1>
+        <span class="badge-{% if interview.status == 'done' %}green{% elif interview.status == 'failed' %}red{% else %}yellow{% endif %}">
+          {{ interview.status|upper }}
+        </span>
+      </div>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
+        Speaker: <strong class="telugu-text" style="color: white;">{{ interview.speaker_name }}</strong> • 
+        Area: <strong class="telugu-text" style="color: white;">{{ interview.area.name|default:"Not specified" }}</strong> • 
+        Phone: {{ interview.speaker_phone|default:"None" }}
+      </p>
+    </div>
+
+    <div style="display: flex; gap: 0.5rem;">
+      <a href="/run/{{ interview.id }}/" class="btn btn-secondary btn-sm">Live Run View</a>
+      <a href="/sheet/?interview={{ interview.id }}" class="btn btn-primary btn-sm">View in Sheet</a>
+    </div>
+  </div>
+
+  <!-- Review Summary Bar -->
+  <div class="card" style="margin-top: 1rem; padding: 1rem 1.5rem; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; background: linear-gradient(135deg, #1e293b, #0f172a);">
+    <div style="display: flex; gap: 2rem; align-items: center;">
+      <div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Correct Cells</div>
+        <div id="stat-ticked" style="font-size: 1.5rem; font-weight: 700; color: #34d399;">
+          ✓ {{ total_ticked }}
+        </div>
+      </div>
+
+      <div style="width: 1px; height: 36px; background-color: var(--border);"></div>
+
+      <div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Flagged Cells</div>
+        <div id="stat-crossed" style="font-size: 1.5rem; font-weight: 700; color: #f87171;">
+          ✗ {{ total_crossed }}
+        </div>
+      </div>
+
+      <div style="width: 1px; height: 36px; background-color: var(--border);"></div>
+
+      <div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Most Common Issue</div>
+        <div id="stat-common-reason" style="font-size: 1.05rem; font-weight: 600; color: #fbbf24;">
+          {{ most_common_reason }}
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size: 0.8rem; color: var(--text-muted);">
+      Mark every cell as correct (✓) or flawed (✗) to trace AI error patterns.
+    </div>
+  </div>
+</div>
+
+<div class="split-container" style="height: auto; min-height: calc(100vh - 280px);">
+  <!-- LEFT: Audio, Source Transcript & Raw Model Logs -->
+  <div class="panel" style="max-height: calc(100vh - 200px); position: sticky; top: 80px;">
+    <div class="panel-header">
+      <span style="font-weight: 600; font-size: 0.95rem;">🎙️ Audio & Full Transcript</span>
+      <span style="font-size: 0.75rem; color: var(--text-muted);">{{ interview.transcript|length }} chars</span>
+    </div>
+
+    <div class="panel-body">
+      {% if interview.audio_file %}
+        <div style="margin-bottom: 1rem;">
+          <audio id="audioPlayer" controls style="width: 100%; border-radius: 8px;">
+            <source src="{{ interview.audio_file.url }}" type="audio/mpeg">
+            Your browser does not support audio element.
+          </audio>
+        </div>
+      {% endif %}
+
+      <div class="transcript-box" style="max-height: 380px;">{{ interview.transcript|default:"No transcript available." }}</div>
+
+      <!-- Collapsible Raw Responses & Logs -->
+      <details style="margin-top: 1.5rem; background: #0b1120; border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem;">
+        <summary style="font-size: 0.85rem; font-weight: 600; cursor: pointer; color: #93c5fd;">
+          🔍 View Raw Gemini JSON Response & Logs
+        </summary>
+        <div style="margin-top: 0.75rem;">
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Raw Extracted JSON:</div>
+          <pre style="background-color: #050811; color: #a5f3fc; padding: 0.75rem; border-radius: 6px; font-size: 0.75rem; overflow-x: auto; max-height: 250px;">{{ interview.raw_extract_response|default:"No raw response saved." }}</pre>
+
+          {% if run_logs %}
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.75rem; margin-bottom: 0.25rem;">Run Logs:</div>
+            {% for log in run_logs %}
+              <div style="font-size: 0.75rem; color: #cbd5e1; padding: 0.3rem 0; border-bottom: 1px solid #1e293b;">
+                <strong>[{{ log.step }}]</strong> {{ log.started_at|date:"H:i:s" }} - {{ log.message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- RIGHT: Problem Row Cards with Tick & Cross -->
+  <div style="overflow-y: auto;">
+    {% for item in rows_with_reviews %}
+      {% with r=item.row fields=item.fields %}
+        <div class="review-row-card" id="card-row-{{ r.id }}">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <div>
+              <span style="font-weight: 700; color: #60a5fa; font-size: 1.05rem;">Row #{{ r.order_no }}</span>
+              <span style="color: #93c5fd; font-weight: 600; margin-left: 0.5rem;">{{ r.category }}</span>
+              <span style="color: #cbd5e1; margin-left: 0.25rem;">↳ {{ r.sub_category }}</span>
+            </div>
+
+            <!-- "Play this part" timestamp button -->
+            {% if r.source_time %}
+              <button class="btn btn-secondary btn-sm" onclick="playAudioAt('{{ r.source_time }}')">
+                ▶ Play this part ({{ r.source_time }})
+              </button>
+            {% endif %}
+          </div>
+
+          <!-- Source Quote Box -->
+          <div class="review-source-quote">
+            <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">EXACT TELUGU SOURCE QUOTE:</span>
+            "{{ r.source_quote|default:"(No exact source quote saved)" }}"
+          </div>
+
+          <!-- Cells Grid -->
+          <div class="review-cell-grid">
+            {% for f in fields %}
+              <div class="review-cell-box" id="box-{{ r.id }}-{{ f.field_name }}">
+                <div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">
+                    {{ f.label }}
+                  </div>
+                  <div class="telugu-text" style="font-size: 0.9rem; color: #f8fafc; margin-top: 0.35rem; min-height: 1.5rem;">
+                    {{ f.value|default:"—" }}
+                  </div>
+                  {% if f.reason %}
+                    <div style="font-size: 0.7rem; color: #fca5a5; margin-top: 0.25rem; font-weight: 500;">
+                      ✗ {{ f.reason }}: {{ f.note }}
+                    </div>
+                  {% endif %}
+                </div>
+
+                <div class="review-actions">
+                  <button class="btn-tick {% if f.status == 'ticked' %}active{% endif %}"
+                          title="Mark as Correct"
+                          onclick="markCellCorrect({{ r.id }}, '{{ f.field_name }}')">
+                    ✓ Correct
+                  </button>
+                  <button class="btn-cross {% if f.status == 'crossed' %}active{% endif %}"
+                          title="Flag AI Error"
+                          onclick="openCrossModal({{ r.id }}, '{{ f.field_name }}', '{{ f.label|escapejs }}', '{{ f.value|escapejs }}')">
+                    ✗ Wrong
+                  </button>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endwith %}
+    {% empty %}
+      <div class="card" style="text-align: center; padding: 4rem; color: var(--text-muted);">
+        No rows found for this interview.
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Modal Dialog for Flagging Cross Reason -->
+<div class="modal-overlay" id="crossModal">
+  <div class="modal-box">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="font-size: 1.15rem; font-weight: 700; color: #f87171;">Flag AI Extraction Error</h3>
+      <button onclick="closeCrossModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.25rem; cursor: pointer;">&times;</button>
+    </div>
+
+    <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;" id="modalFieldLabel">
+      Field: ...
+    </div>
+
+    <form id="crossForm" onsubmit="submitCrossForm(event)">
+      <input type="hidden" id="modalRowId">
+      <input type="hidden" id="modalFieldName">
+
+      <div class="form-group">
+        <label class="form-label" for="modalReason">Select Error Reason *</label>
+        <select id="modalReason" class="form-select" required>
+          {% for code, label in review_reasons %}
+            <option value="{{ code }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="modalNote">Free Note (where did AI go wrong?)</label>
+        <textarea id="modalNote" class="form-control" rows="3" placeholder="e.g. Speaker said 300 voters not 600; or invented a bus stop that wasn't mentioned"></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeCrossModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm" style="background-color: var(--danger);">Save Flag</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const crossModal = document.getElementById('crossModal');
+  const modalRowId = document.getElementById('modalRowId');
+  const modalFieldName = document.getElementById('modalFieldName');
+  const modalFieldLabel = document.getElementById('modalFieldLabel');
+  const modalReason = document.getElementById('modalReason');
+  const modalNote = document.getElementById('modalNote');
+  const audioPlayer = document.getElementById('audioPlayer');
+
+  function playAudioAt(timeStr) {
+    if (!audioPlayer) return;
+    let seconds = 0;
+    const match = timeStr.match(/(\d+)/);
+    if (match) {
+      seconds = parseInt(match[1], 10);
+    }
+    audioPlayer.currentTime = seconds;
+    audioPlayer.play();
+  }
+
+  async function markCellCorrect(rowId, fieldName) {
+    try {
+      const res = await fetch('/api/review/save/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          row_id: rowId,
+          field_name: fieldName,
+          is_correct: true,
+          reason: '',
+          note: ''
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const box = document.getElementById(`box-${rowId}-${fieldName}`);
+        box.querySelector('.btn-tick').classList.add('active');
+        box.querySelector('.btn-cross').classList.remove('active');
+        window.location.reload(); // Refresh counts cleanly
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function openCrossModal(rowId, fieldName, fieldLabel, currentValue) {
+    modalRowId.value = rowId;
+    modalFieldName.value = fieldName;
+    modalFieldLabel.textContent = `Field: ${fieldLabel} ("${currentValue || 'empty'}")`;
+    modalNote.value = '';
+    crossModal.style.display = 'flex';
+  }
+
+  function closeCrossModal() {
+    crossModal.style.display = 'none';
+  }
+
+  async function submitCrossForm(e) {
+    e.preventDefault();
+    const rowId = modalRowId.value;
+    const fieldName = modalFieldName.value;
+    const reason = modalReason.value;
+    const note = modalNote.value;
+
+    try {
+      const res = await fetch('/api/review/save/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          row_id: rowId,
+          field_name: fieldName,
+          is_correct: false,
+          reason: reason,
+          note: note
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        closeCrossModal();
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+</script>
+{% endblock %}

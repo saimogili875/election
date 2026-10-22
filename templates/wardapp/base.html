@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Ward 119 Survey AI - Live Sheet{% endblock %}</title>
+  <meta name="description" content="AI Speech Intelligence and Live Sheet for Ward 119 (Old Bowenpally) Hyderabad civic surveys">
+  
+  <!-- Fonts: Inter & Noto Sans Telugu for faithful Telugu rendering -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Telugu:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- App Styles -->
+  <link rel="stylesheet" href="/static/css/styles.css">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <!-- Header / Navigation Bar -->
+  <header class="navbar">
+    <a href="/" class="brand">
+      <span class="brand-badge">Ward 119</span>
+      <span>Civic Survey AI</span>
+    </a>
+    <nav class="nav-links">
+      <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">🎙️ Upload</a>
+      <a href="/sheet/" class="nav-link {% if '/sheet/' in request.path %}active{% endif %}">📊 Sheet</a>
+      <a href="/prompts/" class="nav-link {% if '/prompts/' in request.path %}active{% endif %}">⚙️ Prompts</a>
+      <a href="/compare/" class="nav-link {% if '/compare/' in request.path %}active{% endif %}">⚖️ Compare</a>
+      <a href="/logout/" class="nav-link" style="color: #f87171;">Logout</a>
+    </nav>
+  </header>
+
+  <!-- Main View Container -->
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

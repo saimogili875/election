@@ -1,0 +1,111 @@
+{% extends "wardapp/base.html" %}
+
+{% block title %}Prompt Versions - Ward 119 Survey AI{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <h1 style="font-size: 1.85rem; font-weight: 700;">Gemini System Prompts</h1>
+      <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
+        Manage and iterate on system prompt versions. Every interview run records which version it used for reproducibility.
+      </p>
+    </div>
+    <button class="btn btn-primary" onclick="openCreateModal()">
+      + New Prompt Version
+    </button>
+  </div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 1.5rem;">
+  {% for p in prompts %}
+    <div class="card" id="prompt-card-{{ p.id }}">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div>
+          <h2 style="font-size: 1.25rem; font-weight: 700; color: #60a5fa;">{{ p.name }}</h2>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            Created: {{ p.created_at|date:"M d, Y H:i" }} • Used in {{ p.interviews.count }} interview runs
+          </span>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-secondary btn-sm" onclick="editPrompt({{ p.id }}, '{{ p.name|escapejs }}')">
+            ✏️ Edit
+          </button>
+        </div>
+      </div>
+
+      <div style="background-color: #0b1120; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; max-height: 250px; overflow-y: auto;">
+        <pre id="prompt-text-{{ p.id }}" style="color: #cbd5e1; font-family: monospace; font-size: 0.85rem; white-space: pre-wrap;">{{ p.text }}</pre>
+      </div>
+    </div>
+  {% empty %}
+    <div class="card" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+      No prompt versions created yet.
+    </div>
+  {% endfor %}
+</div>
+
+<!-- Modal Dialog for Creating/Editing Prompts -->
+<div class="modal-overlay" id="promptModal">
+  <div class="modal-box" style="max-width: 750px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 id="modalTitle" style="font-size: 1.25rem; font-weight: 700;">Create Prompt Version</h3>
+      <button onclick="closeModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.25rem; cursor: pointer;">&times;</button>
+    </div>
+
+    <form method="POST">
+      {% csrf_token %}
+      <input type="hidden" name="action" id="formAction" value="create">
+      <input type="hidden" name="prompt_id" id="formPromptId" value="">
+
+      <div class="form-group">
+        <label class="form-label" for="promptName">Version Name *</label>
+        <input type="text" id="promptName" name="name" class="form-control" placeholder="e.g. Ward 119 v2.0 - More emphasis on root causes" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="promptText">System Prompt Text *</label>
+        <textarea id="promptText" name="text" class="form-control" rows="14" style="font-family: monospace; font-size: 0.85rem;" required></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Save Prompt Version</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const modal = document.getElementById('promptModal');
+  const modalTitle = document.getElementById('modalTitle');
+  const formAction = document.getElementById('formAction');
+  const formPromptId = document.getElementById('formPromptId');
+  const promptName = document.getElementById('promptName');
+  const promptText = document.getElementById('promptText');
+
+  function openCreateModal() {
+    modalTitle.textContent = 'Create New Prompt Version';
+    formAction.value = 'create';
+    formPromptId.value = '';
+    promptName.value = '';
+    promptText.value = '';
+    modal.style.display = 'flex';
+  }
+
+  function editPrompt(id, name) {
+    modalTitle.textContent = `Edit Prompt Version: ${name}`;
+    formAction.value = 'edit';
+    formPromptId.value = id;
+    promptName.value = name;
+    promptText.value = document.getElementById(`prompt-text-${id}`).innerText;
+    modal.style.display = 'flex';
+  }
+
+  function closeModal() {
+    modal.style.display = 'none';
+  }
+</script>
+{% endblock %}

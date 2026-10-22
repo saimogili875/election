@@ -1,0 +1,286 @@
+{% extends "wardapp/base.html" %}
+
+{% block title %}Live Run #{{ interview.id }} - Ward 119 Survey AI{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+  <div>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <h1 style="font-size: 1.5rem; font-weight: 700;">Live Run #{{ interview.id }}</h1>
+      <span id="status-badge" class="badge-{% if interview.status == 'done' %}green{% elif interview.status == 'failed' %}red{% else %}yellow{% endif %}">
+        {{ interview.status|upper }}
+      </span>
+      <span id="stream-indicator" style="font-size: 0.8rem; color: #60a5fa; display: none;">⚡ Streaming...</span>
+    </div>
+    <div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem;">
+      Speaker: <strong class="telugu-text" style="color: white;">{{ interview.speaker_name }}</strong> • 
+      Colony: <strong class="telugu-text" style="color: white;">{{ interview.area.name|default:"Not specified" }}</strong> • 
+      Prompt: <span>{{ interview.prompt_version.name|default:"Default" }}</span>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 0.5rem;">
+    <a href="/review/{{ interview.id }}/" class="btn btn-secondary btn-sm">Review (✓/✗)</a>
+    <a href="/sheet/?interview={{ interview.id }}" class="btn btn-primary btn-sm">Full Sheet</a>
+    <a href="/interview/{{ interview.id }}/export/json/" class="btn btn-secondary btn-sm" target="_blank">Export JSON</a>
+  </div>
+</div>
+
+<div class="split-container">
+  <!-- LEFT PANEL: Audio & Live Transcript -->
+  <div class="panel">
+    <div class="panel-header">
+      <span style="font-weight: 600; font-size: 0.95rem;">🎙️ Audio & Telugu Transcript</span>
+      <span id="transcript-char-count" style="font-size: 0.75rem; color: var(--text-muted);">
+        {{ interview.transcript|length }} chars
+      </span>
+    </div>
+    <div class="panel-body">
+      <!-- Audio Player -->
+      {% if interview.audio_file %}
+        <div style="margin-bottom: 1rem;">
+          <audio id="audioPlayer" controls style="width: 100%; border-radius: 8px;">
+            <source src="{{ interview.audio_file.url }}" type="audio/mpeg">
+            Your browser does not support audio element.
+          </audio>
+        </div>
+      {% endif %}
+
+      <div class="form-label" style="display: flex; justify-content: space-between;">
+        <span>Streamed Transcript (faithful Telugu):</span>
+      </div>
+      <div id="transcriptBox" class="transcript-box {% if interview.status == 'transcribing' %}typing-cursor{% endif %}">{{ interview.transcript|default:"" }}</div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL: Live Sheet with Typewriter Rows -->
+  <div class="panel">
+    <div class="panel-header">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span style="font-weight: 600; font-size: 0.95rem;">📊 Extracted Civic Problems (Sheet)</span>
+        <span id="row-count-badge" class="badge-green">
+          <span id="rowCount">{{ existing_rows|length }}</span> rows
+        </span>
+      </div>
+      <span style="font-size: 0.75rem; color: var(--text-muted);">Rows type out live in column order</span>
+    </div>
+
+    <div class="panel-body" style="padding: 0;">
+      <div class="table-container" style="height: 100%; border: none;">
+        <table class="sheet-table" id="liveSheetTable">
+          <thead>
+            <tr>
+              <th class="sticky-col">#</th>
+              <th>Category</th>
+              <th>Sub-category</th>
+              <th>Where</th>
+              <th>What is happening</th>
+              <th>Why (root cause)</th>
+              <th>To people</th>
+              <th>How it happens</th>
+              <th>Solution</th>
+              <th>Solution impact</th>
+              <th>Voter impact</th>
+              <th>+ done</th>
+              <th>- not done</th>
+              <th>Urgency</th>
+              <th>Scale</th>
+              <th>Dept / Official</th>
+              <th>Influencer</th>
+              <th>Law route</th>
+              <th>Work done?</th>
+              <th>Past complaint</th>
+            </tr>
+          </thead>
+          <tbody id="sheetRowsBody">
+            {% for r in existing_rows %}
+              <tr id="row-{{ r.id }}" data-row-id="{{ r.id }}">
+                <td class="sticky-col" style="font-weight: 700; color: #60a5fa;">{{ r.order_no }}</td>
+                <td style="color: #93c5fd; font-weight: 600;">{{ r.category }}</td>
+                <td style="color: #cbd5e1;">{{ r.sub_category }}</td>
+                <td class="telugu-text" data-field="where">{{ r.where }}</td>
+                <td class="telugu-text" data-field="what" style="max-width: 250px; white-space: normal;">{{ r.what }}</td>
+                <td class="telugu-text" data-field="why">{{ r.why }}</td>
+                <td class="telugu-text" data-field="to_people">{{ r.to_people }}</td>
+                <td class="telugu-text" data-field="how">{{ r.how }}</td>
+                <td class="telugu-text" data-field="solution">{{ r.solution }}</td>
+                <td class="telugu-text" data-field="solution_impact">{{ r.solution_impact }}</td>
+                <td class="telugu-text" data-field="voter_impact">{{ r.voter_impact }}</td>
+                <td data-field="vote_plus" style="text-align: center; color: #34d399; font-weight: 700;">{{ r.vote_plus }}</td>
+                <td data-field="vote_minus" style="text-align: center; color: #f87171; font-weight: 700;">{{ r.vote_minus }}</td>
+                <td data-field="urgency" style="text-align: center;">{{ r.urgency }}</td>
+                <td class="telugu-text" data-field="scale">{{ r.scale }}</td>
+                <td class="telugu-text" data-field="dept_official">{{ r.dept_official }}</td>
+                <td class="telugu-text" data-field="influencer">{{ r.influencer }}</td>
+                <td class="telugu-text" data-field="law_route">{{ r.law_route }}</td>
+                <td class="telugu-text" data-field="work_done">{{ r.work_done }}</td>
+                <td class="telugu-text" data-field="past_complaint">{{ r.past_complaint }}</td>
+              </tr>
+            {% empty %}
+              <tr id="empty-row-placeholder">
+                <td colspan="20" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+                  Waiting for stream to begin... Rows will type out as each problem is extracted.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const interviewId = {{ interview.id }};
+  const isFinished = "{{ interview.status }}" === "done" || "{{ interview.status }}" === "failed";
+  const transcriptBox = document.getElementById('transcriptBox');
+  const sheetRowsBody = document.getElementById('sheetRowsBody');
+  const statusBadge = document.getElementById('status-badge');
+  const streamIndicator = document.getElementById('stream-indicator');
+  const rowCountSpan = document.getElementById('rowCount');
+  const charCountSpan = document.getElementById('transcript-char-count');
+  
+  let totalRows = {{ existing_rows|length }};
+  let eventSource = null;
+
+  // Typewriter effect helper
+  function typeOutText(element, text, speed = 25) {
+    if (!text) return;
+    element.textContent = '';
+    let i = 0;
+    const timer = setInterval(() => {
+      if (i < text.length) {
+        element.textContent += text.charAt(i);
+        i++;
+      } else {
+        clearInterval(timer);
+      }
+    }, speed);
+  }
+
+  function connectSSE() {
+    if (isFinished) {
+      return;
+    }
+
+    streamIndicator.style.display = 'inline-block';
+    eventSource = new EventSource(`/run/${interviewId}/stream/`);
+
+    eventSource.addEventListener('status', (e) => {
+      const data = JSON.parse(e.data);
+      statusBadge.textContent = data.status.toUpperCase();
+      if (data.status === 'transcribing') {
+        transcriptBox.classList.add('typing-cursor');
+        statusBadge.className = 'badge-yellow';
+      } else if (data.status === 'extracting') {
+        transcriptBox.classList.remove('typing-cursor');
+        statusBadge.className = 'badge-yellow';
+      }
+    });
+
+    eventSource.addEventListener('transcript_chunk', (e) => {
+      const data = JSON.parse(e.data);
+      transcriptBox.textContent += data.text;
+      transcriptBox.scrollTop = transcriptBox.scrollHeight;
+      charCountSpan.textContent = `${transcriptBox.textContent.length} chars`;
+    });
+
+    eventSource.addEventListener('row_created', (e) => {
+      const data = JSON.parse(e.data);
+      const row = data.row;
+      
+      const placeholder = document.getElementById('empty-row-placeholder');
+      if (placeholder) placeholder.remove();
+
+      // Check if row already rendered
+      let existingTr = document.getElementById(`row-${row.id}`);
+      if (existingTr) return;
+
+      totalRows++;
+      rowCountSpan.textContent = totalRows;
+
+      const tr = document.createElement('tr');
+      tr.id = `row-${row.id}`;
+      tr.setAttribute('data-row-id', row.id);
+      tr.style.animation = 'fadeIn 0.5s ease-in';
+
+      tr.innerHTML = `
+        <td class="sticky-col" style="font-weight: 700; color: #60a5fa;">${row.order_no}</td>
+        <td style="color: #93c5fd; font-weight: 600;">${row.category}</td>
+        <td style="color: #cbd5e1;">${row.sub_category}</td>
+        <td class="telugu-text" data-field="where"></td>
+        <td class="telugu-text" data-field="what" style="max-width: 250px; white-space: normal;"></td>
+        <td class="telugu-text" data-field="why"></td>
+        <td class="telugu-text" data-field="to_people"></td>
+        <td class="telugu-text" data-field="how"></td>
+        <td class="telugu-text" data-field="solution"></td>
+        <td class="telugu-text" data-field="solution_impact"></td>
+        <td class="telugu-text" data-field="voter_impact"></td>
+        <td data-field="vote_plus" style="text-align: center; color: #34d399; font-weight: 700;"></td>
+        <td data-field="vote_minus" style="text-align: center; color: #f87171; font-weight: 700;"></td>
+        <td data-field="urgency" style="text-align: center;"></td>
+        <td class="telugu-text" data-field="scale"></td>
+        <td class="telugu-text" data-field="dept_official"></td>
+        <td class="telugu-text" data-field="influencer"></td>
+        <td class="telugu-text" data-field="law_route"></td>
+        <td class="telugu-text" data-field="work_done"></td>
+        <td class="telugu-text" data-field="past_complaint"></td>
+      `;
+
+      sheetRowsBody.appendChild(tr);
+
+      // Trigger typewriter typing for initial row fields
+      const fields = [
+        'where', 'what', 'why', 'to_people', 'how', 'solution',
+        'solution_impact', 'voter_impact', 'vote_plus', 'vote_minus',
+        'urgency', 'scale', 'dept_official', 'influencer', 'law_route',
+        'work_done', 'past_complaint'
+      ];
+      fields.forEach((f, idx) => {
+        const td = tr.querySelector(`[data-field="${f}"]`);
+        if (td && row[f]) {
+          setTimeout(() => {
+            typeOutText(td, row[f], 15);
+          }, idx * 120);
+        }
+      });
+    });
+
+    eventSource.addEventListener('cell_filled', (e) => {
+      const data = JSON.parse(e.data);
+      const rowTr = document.getElementById(`row-${data.row_id}`);
+      if (rowTr) {
+        const td = rowTr.querySelector(`[data-field="${data.field}"]`);
+        if (td && !td.textContent) {
+          typeOutText(td, data.text, 20);
+        }
+      }
+    });
+
+    eventSource.addEventListener('done', (e) => {
+      statusBadge.textContent = 'DONE';
+      statusBadge.className = 'badge-green';
+      transcriptBox.classList.remove('typing-cursor');
+      streamIndicator.style.display = 'none';
+      if (eventSource) eventSource.close();
+    });
+
+    eventSource.addEventListener('error', (e) => {
+      console.warn("SSE stream issue or disconnected. Auto-reconnecting in 3 seconds...");
+      if (eventSource) eventSource.close();
+      setTimeout(connectSSE, 3000);
+    });
+  }
+
+  // Connect on load
+  connectSSE();
+</script>
+<style>
+@keyframes fadeIn {
+  from { opacity: 0; background-color: rgba(59, 130, 246, 0.2); }
+  to { opacity: 1; background-color: transparent; }
+}
+</style>
+{% endblock %}

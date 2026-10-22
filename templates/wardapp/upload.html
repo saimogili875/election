@@ -1,0 +1,151 @@
+{% extends "wardapp/base.html" %}
+
+{% block title %}Upload Audio - Ward 119 Survey AI{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+  <div style="margin-bottom: 2rem;">
+    <h1 style="font-size: 1.85rem; font-weight: 700;">New Interview Run</h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.35rem;">
+      Upload Telugu field interview audio. Gemini will stream the faithful transcript and extract civic problem rows live into the sheet.
+    </p>
+  </div>
+
+  {% if error %}
+    <div style="background-color: rgba(239, 68, 68, 0.2); border: 1px solid var(--danger); color: #fca5a5; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
+      {{ error }}
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <form method="POST" enctype="multipart/form-data" id="uploadForm">
+      {% csrf_token %}
+
+      <!-- Drag & Drop Audio Upload Zone -->
+      <div class="form-group">
+        <label class="form-label">Audio File (MP3, WAV, M4A) *</label>
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('audio_file').click()">
+          <div class="dropzone-icon">🎙️</div>
+          <div style="font-weight: 600; font-size: 1.05rem;" id="dropzone-text">Click or Drag & Drop Audio File Here</div>
+          <p style="color: var(--text-muted); font-size: 0.825rem; margin-top: 0.35rem;">Supports .mp3, .wav, .m4a audio recordings</p>
+          <div id="file-chosen" style="margin-top: 0.75rem; color: #60a5fa; font-weight: 600; display: none;"></div>
+        </div>
+        <input type="file" id="audio_file" name="audio_file" accept=".mp3,.wav,.m4a,audio/*" style="display: none;" required onchange="handleFileSelected(this.files)">
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <!-- Area Selection -->
+        <div class="form-group">
+          <label class="form-label" for="area">Colony / Area *</label>
+          <select id="area" name="area" class="form-select telugu-text" required>
+            <option value="">-- Select Colony in Ward 119 --</option>
+            {% for a in areas %}
+              <option value="{{ a.id }}">{{ a.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Prompt Version Selection -->
+        <div class="form-group">
+          <label class="form-label" for="prompt_version">System Prompt Version</label>
+          <select id="prompt_version" name="prompt_version" class="form-select">
+            {% for p in prompts %}
+              <option value="{{ p.id }}">{{ p.name }} ({{ p.created_at|date:"M d, Y" }})</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <!-- Speaker Name -->
+        <div class="form-group">
+          <label class="form-label" for="speaker_name">Speaker Name *</label>
+          <input type="text" id="speaker_name" name="speaker_name" class="form-control telugu-text" placeholder="e.g. సురేష్ కుమార్ / Suresh Kumar" required>
+        </div>
+
+        <!-- Speaker Phone -->
+        <div class="form-group">
+          <label class="form-label" for="speaker_phone">Speaker Phone (Optional)</label>
+          <input type="tel" id="speaker_phone" name="speaker_phone" class="form-control" placeholder="e.g. 9848012345">
+        </div>
+      </div>
+
+      <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+        <button type="submit" id="submitBtn" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 1rem;">
+          🚀 Start Live Run
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Recent Runs List -->
+  {% if recent_interviews %}
+    <div style="margin-top: 3rem;">
+      <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem;">Recent Test Runs</h2>
+      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        {% for item in recent_interviews %}
+          <div class="card" style="padding: 1rem 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <span class="telugu-text" style="font-weight: 600; font-size: 1.05rem;">{{ item.speaker_name }}</span>
+              <span style="color: var(--text-muted); font-size: 0.85rem; margin-left: 0.5rem;">
+                ({{ item.area.name|default:"Unknown Area" }})
+              </span>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">
+                Status: <span class="badge-{% if item.status == 'done' %}green{% elif item.status == 'failed' %}red{% else %}yellow{% endif %}">{{ item.status|upper }}</span>
+                • {{ item.created_at|date:"M d, H:i" }} • {{ item.rows.count }} rows extracted
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <a href="/run/{{ item.id }}/" class="btn btn-secondary btn-sm">Live Run</a>
+              <a href="/review/{{ item.id }}/" class="btn btn-primary btn-sm">Review (✓/✗)</a>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('audio_file');
+  const fileChosen = document.getElementById('file-chosen');
+  const dropzoneText = document.getElementById('dropzone-text');
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropzone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.add('dragover');
+    }, false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropzone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.remove('dragover');
+    }, false);
+  });
+
+  dropzone.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    if (files.length) {
+      fileInput.files = files;
+      handleFileSelected(files);
+    }
+  });
+
+  function handleFileSelected(files) {
+    if (files && files[0]) {
+      const file = files[0];
+      dropzoneText.textContent = 'Audio file selected';
+      fileChosen.textContent = `🎵 ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
+      fileChosen.style.display = 'block';
+    }
+  }
+</script>
+{% endblock %}

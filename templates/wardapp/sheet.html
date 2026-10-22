@@ -1,0 +1,245 @@
+{% extends "wardapp/base.html" %}
+{% load sheet_tags %}
+
+{% block title %}Civic Sheet - Ward 119 Survey AI{% endblock %}
+
+{% block content %}
+<!-- Top Header & Filter Controls -->
+<div style="margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h1 style="font-size: 1.85rem; font-weight: 700;">Civic Problem Sheet</h1>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
+        Master repository grouped by Category & Sub-category • Inline editable (autosaves in 500ms)
+      </p>
+    </div>
+
+    <!-- Actions: Exports and Stats -->
+    <div style="display: flex; gap: 0.75rem; align-items: center;">
+      <span class="badge-green" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">
+        Total Rows: <strong>{{ total_rows }}</strong>
+      </span>
+      <a href="/sheet/export/csv/" class="btn btn-secondary btn-sm">
+        📥 Export Excel CSV (UTF-8 BOM)
+      </a>
+      {% if selected_interview %}
+        <a href="/interview/{{ selected_interview }}/export/json/" class="btn btn-primary btn-sm" target="_blank">
+          📄 Export Run JSON
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Error-Highlight Legend -->
+  <div style="display: flex; gap: 1.5rem; align-items: center; margin-top: 0.75rem; font-size: 0.8rem; background-color: rgba(15, 23, 42, 0.6); padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid var(--border);">
+    <span style="font-weight: 600; color: #cbd5e1;">Quality Flags:</span>
+    <span style="display: flex; align-items: center; gap: 0.4rem;">
+      <span style="width: 12px; height: 12px; background: rgba(239, 68, 68, 0.3); border: 1px solid var(--danger); border-radius: 2px;"></span>
+      <span style="color: #fca5a5;">Red = Possible Invented Words (not in audio transcript)</span>
+    </span>
+    <span style="display: flex; align-items: center; gap: 0.4rem;">
+      <span style="width: 12px; height: 12px; background: rgba(245, 158, 11, 0.3); border: 1px solid var(--warning); border-radius: 2px;"></span>
+      <span style="color: #fde68a;">Yellow = Empty, but transcript mentions related keywords</span>
+    </span>
+    <span style="display: flex; align-items: center; gap: 0.4rem; margin-left: auto;">
+      <span id="save-status-indicator" style="color: #34d399; font-weight: 500;">✓ All edits saved</span>
+    </span>
+  </div>
+
+  <!-- Filter Form -->
+  <form method="GET" class="card" style="margin-top: 1rem; padding: 1rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+    <div style="flex: 1; min-width: 200px;">
+      <label class="form-label" style="font-size: 0.75rem;">Filter by Colony / Area</label>
+      <select name="area" class="form-select telugu-text" style="font-size: 0.85rem; padding: 0.45rem;">
+        <option value="">All Colonies</option>
+        {% for a in areas %}
+          <option value="{{ a.id }}" {% if selected_area == a.id|stringformat:"s" %}selected{% endif %}>{{ a.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="flex: 1; min-width: 180px;">
+      <label class="form-label" style="font-size: 0.75rem;">Filter by Speaker</label>
+      <input type="text" name="speaker" class="form-control" placeholder="Search name..." value="{{ selected_speaker }}" style="font-size: 0.85rem; padding: 0.45rem;">
+    </div>
+
+    <div style="flex: 1; min-width: 200px;">
+      <label class="form-label" style="font-size: 0.75rem;">Filter by Specific Run</label>
+      <select name="interview" class="form-select" style="font-size: 0.85rem; padding: 0.45rem;">
+        <option value="">All Interview Runs</option>
+        {% for inv in interviews %}
+          <option value="{{ inv.id }}" {% if selected_interview == inv.id|stringformat:"s" %}selected{% endif %}>
+            #{{ inv.id }} - {{ inv.speaker_name }} ({{ inv.created_at|date:"M d, H:i" }})
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="display: flex; gap: 0.5rem;">
+      <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+      <a href="/sheet/" class="btn btn-secondary btn-sm">Reset</a>
+    </div>
+  </form>
+</div>
+
+<!-- Grouped Sheet Table -->
+<div class="table-container" style="max-height: calc(100vh - 300px); overflow-y: auto;">
+  <table class="sheet-table">
+    <thead>
+      <tr>
+        <th class="sticky-col">Speaker & Area</th>
+        <th>1. Where</th>
+        <th>2. What is happening</th>
+        <th>3. Why (root cause)</th>
+        <th>4. To people</th>
+        <th>5. How it happens</th>
+        <th>6. Solution</th>
+        <th>7. Solution impact</th>
+        <th>8. Voter impact</th>
+        <th>9a. + done</th>
+        <th>9b. - not done</th>
+        <th>10. Urgency</th>
+        <th>11. Scale</th>
+        <th>12. Dept / Official</th>
+        <th>13. Influencer</th>
+        <th>14. Law route</th>
+        <th>15. Work done?</th>
+        <th>16. Past complaint</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cat, subcats in grouped_data.items %}
+        <!-- Category Level Banner -->
+        <tr class="category-header">
+          <td colspan="19">
+            <strong>📁 {{ cat }}</strong>
+          </td>
+        </tr>
+
+        {% for subcat, items in subcats.items %}
+          <!-- Sub-Category Level Header -->
+          <tr class="subcategory-header">
+            <td colspan="19" style="padding-left: 2rem;">
+              <strong>↳ {{ subcat }}</strong> ({{ items|length }} issue{% if items|length > 1 %}s{% endif %})
+            </td>
+          </tr>
+
+          <!-- Problem Rows -->
+          {% for item in items %}
+            {% with r=item.row v=item.validations %}
+              <tr id="row-tr-{{ r.id }}" data-row-id="{{ r.id }}">
+                <!-- Sticky Column: Speaker info & Area -->
+                <td class="sticky-col" style="background-color: #1e293b; min-width: 180px;">
+                  <div class="telugu-text" style="font-weight: 600; color: #f8fafc;">{{ r.speaker_name }}</div>
+                  {% if r.speaker_phone %}
+                    <div style="font-size: 0.75rem; color: #94a3b8;">📞 {{ r.speaker_phone }}</div>
+                  {% endif %}
+                  <div class="telugu-text" style="font-size: 0.75rem; color: #60a5fa; margin-top: 0.15rem;">
+                    📍 {{ r.area.name|default:"Unknown Area" }}
+                  </div>
+                </td>
+
+                <!-- 17 Cell Fields with Contenteditable and Quality Highlights -->
+                {% for f in cell_fields %}
+                  {% with val_info=v|dictsort:f %}
+                    <td class="editable-cell-wrapper {% if item.validations|get_item:f|get_item:'highlight' == 'red' %}cell-highlight-red{% elif item.validations|get_item:f|get_item:'highlight' == 'yellow' %}cell-highlight-yellow{% endif %}"
+                        title="{{ item.validations|get_item:f|get_item:'reason' }}">
+                      <div class="editable-cell"
+                           contenteditable="true"
+                           data-row-id="{{ r.id }}"
+                           data-field="{{ f }}"
+                           spellcheck="false">{{ r|get_attr:f }}</div>
+                    </td>
+                  {% endwith %}
+                {% endfor %}
+
+                <!-- Actions: Link to review -->
+                <td style="text-align: center;">
+                  <a href="/review/{{ r.interview_id }}/" class="btn btn-secondary btn-sm" title="Review ticks and crosses">
+                    Review
+                  </a>
+                </td>
+              </tr>
+            {% endwith %}
+          {% endfor %}
+        {% endfor %}
+      {% empty %}
+        <tr>
+          <td colspan="19" style="text-align: center; padding: 4rem; color: var(--text-muted);">
+            No problem rows found matching filters. Upload an interview audio to start!
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // 500ms debounced autosave for inline cell edits
+  let saveTimers = {};
+  const saveIndicator = document.getElementById('save-status-indicator');
+
+  document.querySelectorAll('.editable-cell').forEach(cell => {
+    cell.addEventListener('input', function() {
+      const rowId = this.getAttribute('data-row-id');
+      const field = this.getAttribute('data-field');
+      const value = this.innerText.trim();
+      const key = `${rowId}_${field}`;
+
+      saveIndicator.innerHTML = '<span style="color: #f59e0b;">⏳ Saving...</span>';
+      this.classList.add('cell-saving');
+
+      if (saveTimers[key]) {
+        clearTimeout(saveTimers[key]);
+      }
+
+      saveTimers[key] = setTimeout(() => {
+        saveCell(rowId, field, value, this);
+      }, 500);
+    });
+  });
+
+  async function saveCell(rowId, field, value, cellElement) {
+    try {
+      const response = await fetch(`/api/row/${rowId}/update/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          field: field,
+          value: value
+        })
+      });
+
+      const res = await response.json();
+      cellElement.classList.remove('cell-saving');
+
+      if (res.success) {
+        saveIndicator.innerHTML = '<span style="color: #34d399;">✓ Saved</span>';
+        
+        // Update highlight status based on validator response
+        const wrapper = cellElement.parentElement;
+        wrapper.classList.remove('cell-highlight-red', 'cell-highlight-yellow');
+        if (res.validation && res.validation.highlight === 'red') {
+          wrapper.classList.add('cell-highlight-red');
+          wrapper.title = res.validation.reason;
+        } else if (res.validation && res.validation.highlight === 'yellow') {
+          wrapper.classList.add('cell-highlight-yellow');
+          wrapper.title = res.validation.reason;
+        } else {
+          wrapper.title = '';
+        }
+      } else {
+        saveIndicator.innerHTML = `<span style="color: #ef4444;">Error: ${res.error}</span>`;
+      }
+    } catch (err) {
+      cellElement.classList.remove('cell-saving');
+      saveIndicator.innerHTML = '<span style="color: #ef4444;">Network error while saving</span>';
+    }
+  }
+</script>
+{% endblock %}
