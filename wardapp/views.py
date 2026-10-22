@@ -305,6 +305,14 @@ def sheet_view(request):
     speaker_filter = request.GET.get("speaker", "")
     interview_filter = request.GET.get("interview", "")
 
+    # Default to latest interview if none specified to avoid mixing multiple runs
+    if interview_filter == "":
+        latest_inv = Interview.objects.order_by("-created_at").first()
+        if latest_inv:
+            interview_filter = str(latest_inv.id)
+    elif interview_filter == "all":
+        interview_filter = ""
+
     rows_qs = Row.objects.select_related("interview", "area").all()
 
     if area_filter:
@@ -410,6 +418,14 @@ def export_sheet_csv(request):
     interview_filter = request.GET.get("interview", "")
     area_filter = request.GET.get("area", "")
     speaker_filter = request.GET.get("speaker", "")
+
+    # Default to latest interview if not specified so we don't mix duplicate runs
+    if interview_filter == "":
+        latest_inv = Interview.objects.order_by("-created_at").first()
+        if latest_inv:
+            interview_filter = str(latest_inv.id)
+    elif interview_filter == "all":
+        interview_filter = ""
 
     rows = Row.objects.select_related("interview", "area").all()
     if interview_filter:

@@ -53,9 +53,9 @@
         </a>
       </div>
       <div style="display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.25rem;">
-        <a href="/sheet/" 
-           class="btn btn-sm {% if not selected_interview %}btn-primary{% else %}btn-secondary{% endif %}" 
-           style="font-size: 0.8rem; white-space: nowrap; {% if not selected_interview %}border: 1px solid #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.4);{% endif %}">
+        <a href="/sheet/?interview=all" 
+           class="btn btn-sm {% if selected_interview == '' or selected_interview == 'all' %}btn-primary{% else %}btn-secondary{% endif %}" 
+           style="font-size: 0.8rem; white-space: nowrap; {% if selected_interview == '' or selected_interview == 'all' %}border: 1px solid #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.4);{% endif %}">
           🌐 All Reports Combined ({{ total_all_rows }})
         </a>
         {% for inv in interviews %}
