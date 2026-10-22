@@ -181,38 +181,6 @@ def sanitize_json_response(raw_text: str) -> List[Dict[str, Any]]:
             continue
     return results
 
-def stream_extract_rows(interview: Interview) -> Generator[Dict[str, Any], None, List[Row]]:
-    """
-    Calls Gemini with the transcript and prompt version.
-    Incrementally parses JSON array, creates Row objects, and yields them.
-    """
-    run_log = RunLog.objects.create(
-        interview=interview,
-        step="extract",
-        started_at=timezone.now(),
-        message="Starting row extraction stream"
-    )
-
-    api_key = getattr(settings, 'GEMINI_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
-    model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
-
-    prompt_text = ""
-    if interview.prompt_version and interview.prompt_version.text:
-        prompt_text = interview.prompt_version.text
-    else:
-        prompt_file = settings.BASE_DIR / 'gemini_prompt_ward119.md'
-        if prompt_file.exists():
-            prompt_text = prompt_file.read_text(encoding='utf-8')
-
-    full_system_instruction = (
-        f"{prompt_text}\n\n"
-        "IMPORTANT: Output MUST be a strictly valid JSON array of objects. "
-        "Do NOT include markdown formatting or explanations."
-    )
-
-    extracted_rows = []
-    order_no = 1
-
 def categorize_qa(q: str, a: str) -> tuple:
     """Heuristic categorizer for Telugu civic issues when offline."""
     text = (q + " " + a).lower()
@@ -249,15 +217,12 @@ def categorize_qa(q: str, a: str) -> tuple:
 def extract_qa_problems_from_text(transcript_text: str, default_area: str = "") -> List[Dict[str, Any]]:
     """Parses Telugu Q&A interview/survey notes into structured problem objects."""
     problems = []
-    
-    # Check if text contains ## sections
     sections = re.split(r"(?:^|\n)##\s+", transcript_text)
     
     if len(sections) > 1:
         for s in sections[1:]:
             lines = s.strip().split("\n")
             section_title = lines[0].strip()
-            # Clean section number like "1. అంజయ్య నగర్..."
             area_name = re.sub(r"^\d+\.?\s*", "", section_title).strip()
             rest = "\n".join(lines[1:])
             
@@ -271,7 +236,6 @@ def extract_qa_problems_from_text(transcript_text: str, default_area: str = "") 
                 a = p.group(2).strip()
                 cat, subcat = categorize_qa(q, a)
                 
-                # Extract root cause
                 why = ""
                 if "నిర్లక్ష్యం" in a:
                     why = "వర్కర్ల నిర్లక్ష్యం"
@@ -282,14 +246,12 @@ def extract_qa_problems_from_text(transcript_text: str, default_area: str = "") 
                 elif "పట్టించుకోవడం" in a:
                     why = "అధికారుల నిర్లక్ష్యం / పట్టించుకోకపోవడం"
 
-                # Extract impact on people
                 to_people = ""
                 if "ఇబ్బందు" in a:
                     to_people = "కాలనీవాసులు తీవ్ర ఇబ్బందులకు గురవుతున్నారు"
                 if "డబ్బులు డిమాండ్" in a:
                     to_people = "డబ్బులు డిమాండ్ చేస్తున్నారు"
 
-                # Extract solution
                 solution = ""
                 sol_match = re.search(r"(?:చర్యలు తీసుకోవాలి|పూర్తి చేయాలి|శుభ్రం చేయాలి|ఏర్పాటు చేయాలి|పరిష్కరించాలి)[^\n.]*", a)
                 if sol_match:
@@ -297,7 +259,6 @@ def extract_qa_problems_from_text(transcript_text: str, default_area: str = "") 
                 elif "కావున" in a:
                     solution = a.split("కావున")[-1].strip()
 
-                # Voter impact
                 voter_impact = ""
                 if "ఓటర్ల" in a or "ఓటింగ్" in a or "వ్యతిరేకత" in a or "అభిమానం" in a or "ఓటు" in a:
                     for sentence in a.split("."):
@@ -329,6 +290,38 @@ def extract_qa_problems_from_text(transcript_text: str, default_area: str = "") 
                     "source_time": ""
                 })
     return problems
+
+def stream_extract_rows(interview: Interview) -> Generator[Dict[str, Any], None, List[Row]]:
+    """
+    Calls Gemini with the transcript and prompt version.
+    Incrementally parses JSON array, creates Row objects, and yields them.
+    """
+    run_log = RunLog.objects.create(
+        interview=interview,
+        step="extract",
+        started_at=timezone.now(),
+        message="Starting row extraction stream"
+    )
+
+    api_key = getattr(settings, 'GEMINI_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
+    model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+
+    prompt_text = ""
+    if interview.prompt_version and interview.prompt_version.text:
+        prompt_text = interview.prompt_version.text
+    else:
+        prompt_file = settings.BASE_DIR / 'gemini_prompt_ward119.md'
+        if prompt_file.exists():
+            prompt_text = prompt_file.read_text(encoding='utf-8')
+
+    full_system_instruction = (
+        f"{prompt_text}\n\n"
+        "IMPORTANT: Output MUST be a strictly valid JSON array of objects. "
+        "Do NOT include markdown formatting or explanations."
+    )
+
+    extracted_rows = []
+    order_no = 1
 
     # Offline / Mock Fallback if no GEMINI_API_KEY
     if not api_key:
