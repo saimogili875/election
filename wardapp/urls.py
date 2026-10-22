@@ -19,6 +19,8 @@ urlpatterns = [
     path('sheet/', views.sheet_view, name='sheet'),
     path('sheet/export/csv/', views.export_sheet_csv, name='export_sheet_csv'),
     path('interview/<int:interview_id>/export/json/', views.export_interview_json, name='export_interview_json'),
+    path('interview/<int:interview_id>/delete/', views.delete_interview_view, name='delete_interview'),
+    path('interview/delete-all/', views.delete_all_interviews_view, name='delete_all_interviews'),
     path('api/row/<int:row_id>/update/', views.api_row_update, name='api_row_update'),
 
     # 4. Review (/review/<id>/)

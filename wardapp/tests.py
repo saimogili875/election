@@ -155,6 +155,34 @@ class ViewAndExportTests(TestCase):
         self.assertEqual(data["speaker_name"], "సురేష్ కుమార్")
         self.assertEqual(len(data["rows"]), 1)
 
+    def test_delete_interview_view(self):
+        from wardapp.models import Interview, Row
+        session = self.client.session
+        session['is_authenticated'] = True
+        session.save()
+
+        # Delete the interview
+        response = self.client.post(
+            f'/interview/{self.interview.id}/delete/',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        # Verify interview and its cascaded row are gone
+        self.assertFalse(Interview.objects.filter(id=self.interview.id).exists())
+        self.assertFalse(Row.objects.filter(interview_id=self.interview.id).exists())
+
+    def test_sheet_view_with_interview_filter(self):
+        session = self.client.session
+        session['is_authenticated'] = True
+        session.save()
+
+        response = self.client.get(f'/sheet/?interview={self.interview.id}')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f"Report #{self.interview.id}")
+        self.assertContains(response, "డ్రైనేజీ రోడ్డుపై మురుగు నీరు")
+
 
 class TranscribeContractTests(TestCase):
     def test_transcribe_stub_contract(self):

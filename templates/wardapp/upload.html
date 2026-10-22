@@ -106,32 +106,69 @@
   </div>
 
   <!-- Recent Runs List -->
-  {% if recent_interviews %}
-    <div style="margin-top: 3rem;">
-      <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem;">Recent Test Runs</h2>
-      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-        {% for item in recent_interviews %}
-          <div class="card" style="padding: 1rem 1.25rem; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <span class="telugu-text" style="font-weight: 600; font-size: 1.05rem;">{{ item.speaker_name }}</span>
-              <span style="color: var(--text-muted); font-size: 0.85rem; margin-left: 0.5rem;">
+  <div style="margin-top: 3rem;" id="recent-runs-container" {% if not recent_interviews %}style="display: none;"{% endif %}>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+      <div>
+        <h2 style="font-size: 1.25rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.5rem;">
+          Recent Test Runs
+          <span id="runs-count-badge" class="badge-blue" style="font-size: 0.75rem; padding: 0.15rem 0.5rem;">
+            {{ recent_interviews|length }}
+          </span>
+        </h2>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">
+          Select any report to open its sheet directly or delete unwanted test runs.
+        </p>
+      </div>
+      {% if recent_interviews %}
+        <button type="button" onclick="deleteAllRuns()" class="btn btn-sm" style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-size: 0.75rem; padding: 0.35rem 0.75rem;">
+          🗑️ Clear All Runs
+        </button>
+      {% endif %}
+    </div>
+
+    <!-- Alert banner for delete feedback -->
+    <div id="delete-alert" style="display: none; background-color: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #6ee7b7; padding: 0.6rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem;"></div>
+
+    <div style="display: flex; flex-direction: column; gap: 0.75rem;" id="runs-list">
+      {% for item in recent_interviews %}
+        <div class="card run-card" id="run-card-{{ item.id }}" style="padding: 1rem 1.25rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.3s ease; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span style="background: #334155; color: #93c5fd; font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px;">#{{ item.id }}</span>
+              <span class="telugu-text" style="font-weight: 600; font-size: 1.05rem; color: #f8fafc;">{{ item.speaker_name }}</span>
+              <span style="color: var(--text-muted); font-size: 0.85rem;">
                 ({{ item.area.name|default:"All Ward 119 Colonies" }})
               </span>
-              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">
-                Status: <span class="badge-{% if item.status == 'done' %}green{% elif item.status == 'failed' %}red{% else %}yellow{% endif %}">{{ item.status|upper }}</span>
-                • {{ item.created_at|date:"M d, H:i" }} • {{ item.rows.count }} rows extracted
-              </div>
             </div>
-            <div style="display: flex; gap: 0.5rem;">
-              <a href="/run/{{ item.id }}/" class="btn btn-secondary btn-sm">Live Run</a>
-              <a href="/sheet/?interview={{ item.id }}" class="btn btn-secondary btn-sm">Sheet</a>
-              <a href="/review/{{ item.id }}/" class="btn btn-primary btn-sm">Review (✓/✗)</a>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem; display: flex; gap: 0.75rem; align-items: center;">
+              <span>Status: <span class="badge-{% if item.status == 'done' %}green{% elif item.status == 'failed' %}red{% else %}yellow{% endif %}">{{ item.status|upper }}</span></span>
+              <span>• {{ item.created_at|date:"M d, H:i" }}</span>
+              <span style="color: #60a5fa; font-weight: 600;">• {{ item.rows.count }} rows extracted</span>
+              {% if item.audio_file %}<span>• 🎙️ Audio</span>{% else %}<span>• 📝 Text</span>{% endif %}
             </div>
           </div>
-        {% endfor %}
-      </div>
+          <div style="display: flex; gap: 0.45rem; align-items: center; flex-wrap: wrap;">
+            <a href="/sheet/?interview={{ item.id }}" class="btn btn-primary btn-sm" style="font-size: 0.8rem; background-color: #2563eb;">
+              📊 Open Sheet
+            </a>
+            <a href="/run/{{ item.id }}/" class="btn btn-secondary btn-sm" style="font-size: 0.8rem;">
+              Live Run
+            </a>
+            <a href="/review/{{ item.id }}/" class="btn btn-secondary btn-sm" style="font-size: 0.8rem;">
+              Review (✓/✗)
+            </a>
+            <button type="button" onclick="deleteRun({{ item.id }}, '{{ item.speaker_name|escapejs }}', {{ item.rows.count }})" class="btn btn-sm" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; font-size: 0.8rem; padding: 0.35rem 0.65rem;" title="Delete Test Run #{{ item.id }}">
+              🗑️ Delete
+            </button>
+          </div>
+        </div>
+      {% empty %}
+        <div class="card" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+          No test runs yet. Upload audio or paste field notes above to generate your first live sheet!
+        </div>
+      {% endfor %}
     </div>
-  {% endif %}
+  </div>
 </div>
 {% endblock %}
 
@@ -236,6 +273,101 @@
       dropzoneText.textContent = 'Audio file selected';
       fileChosen.textContent = `🎵 ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
       fileChosen.style.display = 'block';
+    }
+  }
+
+  // Delete individual run
+  async function deleteRun(id, speakerName, rowCount) {
+    const msg = `Are you sure you want to delete Test Run #${id} ("${speakerName}")?\n\nThis will permanently delete this report and all its ${rowCount} extracted rows.`;
+    if (!confirm(msg)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/interview/${id}/delete/`, {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        const card = document.getElementById(`run-card-${id}`);
+        if (card) {
+          card.style.opacity = '0';
+          card.style.transform = 'scale(0.95)';
+          card.style.maxHeight = '0';
+          card.style.overflow = 'hidden';
+          card.style.padding = '0';
+          card.style.margin = '0';
+          setTimeout(() => card.remove(), 350);
+        }
+        showAlert(data.message);
+        updateRunCount(-1);
+      } else {
+        alert(data.error || 'Failed to delete test run.');
+      }
+    } catch (err) {
+      alert('Network error while deleting test run.');
+    }
+  }
+
+  // Delete all runs
+  async function deleteAllRuns() {
+    const msg = '⚠️ WARNING: Are you sure you want to delete ALL test runs and rows?\n\nThis will permanently clear all saved runs and extracted data.';
+    if (!confirm(msg)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/interview/delete-all/', {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        const list = document.getElementById('runs-list');
+        if (list) {
+          list.innerHTML = '<div class="card" style="padding: 2rem; text-align: center; color: var(--text-muted);">All test runs have been cleared.</div>';
+        }
+        const badge = document.getElementById('runs-count-badge');
+        if (badge) badge.textContent = '0';
+        showAlert(data.message);
+      } else {
+        alert(data.error || 'Failed to clear all test runs.');
+      }
+    } catch (err) {
+      alert('Network error while clearing runs.');
+    }
+  }
+
+  function showAlert(msg) {
+    const alertBox = document.getElementById('delete-alert');
+    if (alertBox) {
+      alertBox.textContent = '✓ ' + msg;
+      alertBox.style.display = 'block';
+      setTimeout(() => {
+        alertBox.style.display = 'none';
+      }, 5000);
+    }
+  }
+
+  function updateRunCount(delta) {
+    const badge = document.getElementById('runs-count-badge');
+    if (badge) {
+      const current = parseInt(badge.textContent.trim(), 10) || 0;
+      const next = Math.max(0, current + delta);
+      badge.textContent = next;
+      if (next === 0) {
+        const list = document.getElementById('runs-list');
+        if (list) {
+          list.innerHTML = '<div class="card" style="padding: 2rem; text-align: center; color: var(--text-muted);">No test runs remaining.</div>';
+        }
+      }
     }
   }
 </script>

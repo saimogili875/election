@@ -8,30 +8,100 @@
 <div style="margin-bottom: 1.5rem;">
   <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
     <div>
-      <h1 style="font-size: 1.85rem; font-weight: 700;">Civic Problem Sheet</h1>
+      <h1 style="font-size: 1.85rem; font-weight: 700; display: flex; align-items: center; gap: 0.6rem;">
+        Civic Problem Sheet
+        {% if active_interview %}
+          <span class="badge-blue" style="font-size: 0.85rem; padding: 0.25rem 0.6rem;">
+            Report #{{ active_interview.id }}
+          </span>
+        {% else %}
+          <span class="badge-green" style="font-size: 0.85rem; padding: 0.25rem 0.6rem;">
+            All Reports Combined
+          </span>
+        {% endif %}
+      </h1>
       <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
         Master repository grouped by Category & Sub-category • Inline editable (autosaves in 500ms)
       </p>
     </div>
 
     <!-- Actions: Exports and Stats -->
-    <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
       <span class="badge-green" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">
-        Total Rows: <strong>{{ total_rows }}</strong>
+        Showing: <strong>{{ total_rows }}</strong> {% if total_all_rows != total_rows %}(of {{ total_all_rows }} total){% endif %} rows
       </span>
-      <a href="/sheet/export/csv/" class="btn btn-secondary btn-sm">
-        📥 Export Excel CSV (UTF-8 BOM)
+      <a href="/sheet/export/csv/{% if selected_interview %}?interview={{ selected_interview }}{% if selected_area %}&area={{ selected_area }}{% endif %}{% elif selected_area %}?area={{ selected_area }}{% endif %}" class="btn btn-secondary btn-sm" id="export-csv-btn">
+        📥 Export Excel CSV {% if active_interview %}(Run #{{ active_interview.id }}){% endif %}
       </a>
-      {% if selected_interview %}
-        <a href="/interview/{{ selected_interview }}/export/json/" class="btn btn-primary btn-sm" target="_blank">
-          📄 Export Run JSON
+      {% if active_interview %}
+        <a href="/interview/{{ active_interview.id }}/export/json/" class="btn btn-primary btn-sm" target="_blank">
+          📄 Export Run #{{ active_interview.id }} JSON
         </a>
       {% endif %}
     </div>
   </div>
 
+  <!-- Quick Report Switcher Bar (Instant Flipping Between Runs) -->
+  {% if interviews %}
+    <div style="margin-top: 1.25rem; background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem;">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <span style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">
+          ⚡ Instant Report Switcher (Click to Flip):
+        </span>
+        <a href="/" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;">
+          + Ingest New Interview
+        </a>
+      </div>
+      <div style="display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.25rem;">
+        <a href="/sheet/" 
+           class="btn btn-sm {% if not selected_interview %}btn-primary{% else %}btn-secondary{% endif %}" 
+           style="font-size: 0.8rem; white-space: nowrap; {% if not selected_interview %}border: 1px solid #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.4);{% endif %}">
+          🌐 All Reports Combined ({{ total_all_rows }})
+        </a>
+        {% for inv in interviews %}
+          <a href="/sheet/?interview={{ inv.id }}{% if selected_area %}&area={{ selected_area }}{% endif %}" 
+             class="btn btn-sm {% if selected_interview == inv.id|stringformat:'s' %}btn-primary{% else %}btn-secondary{% endif %}" 
+             style="font-size: 0.8rem; white-space: nowrap; {% if selected_interview == inv.id|stringformat:'s' %}border: 1px solid #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.4);{% endif %}"
+             title="{{ inv.created_at|date:'M d, H:i' }}">
+            #{{ inv.id }} • {{ inv.speaker_name|truncatechars:18 }}
+            <span style="background: rgba(0,0,0,0.3); padding: 0.1rem 0.4rem; border-radius: 9999px; font-size: 0.75rem; margin-left: 0.35rem;">
+              {{ inv.rows.count }} rows
+            </span>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Active Report Details Banner -->
+  {% if active_interview %}
+    <div class="card" style="margin-top: 0.75rem; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; background: rgba(30, 41, 59, 0.7); border: 1px solid #334155;">
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <strong style="color: #60a5fa; font-size: 0.95rem;">Active Report #{{ active_interview.id }}:</strong>
+          <span class="telugu-text" style="font-weight: 600; font-size: 0.95rem; color: #f8fafc;">{{ active_interview.speaker_name }}</span>
+          <span style="color: var(--text-muted); font-size: 0.85rem;">({{ active_interview.area.name|default:"All Ward 119 Colonies" }})</span>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+          Created: {{ active_interview.created_at|date:"M d, Y H:i" }} • Model: {{ active_interview.model_name }} • Status: <span class="badge-green">{{ active_interview.status|upper }}</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 0.45rem; align-items: center;">
+        <a href="/run/{{ active_interview.id }}/" class="btn btn-secondary btn-sm" style="font-size: 0.8rem;">
+          🎙️ Live Run & Notes
+        </a>
+        <a href="/review/{{ active_interview.id }}/" class="btn btn-secondary btn-sm" style="font-size: 0.8rem;">
+          ✓/✗ Review
+        </a>
+        <button type="button" onclick="deleteActiveReport({{ active_interview.id }}, '{{ active_interview.speaker_name|escapejs }}')" class="btn btn-sm" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; font-size: 0.8rem; padding: 0.3rem 0.65rem;" title="Delete this run">
+          🗑️ Delete Run
+        </button>
+      </div>
+    </div>
+  {% endif %}
+
   <!-- Error-Highlight Legend -->
-  <div style="display: flex; gap: 1.5rem; align-items: center; margin-top: 0.75rem; font-size: 0.8rem; background-color: rgba(15, 23, 42, 0.6); padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid var(--border);">
+  <div style="display: flex; gap: 1.5rem; align-items: center; margin-top: 0.75rem; font-size: 0.8rem; background-color: rgba(15, 23, 42, 0.6); padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid var(--border); flex-wrap: wrap;">
     <span style="font-weight: 600; color: #cbd5e1;">Quality Flags:</span>
     <span style="display: flex; align-items: center; gap: 0.4rem;">
       <span style="width: 12px; height: 12px; background: rgba(239, 68, 68, 0.3); border: 1px solid var(--danger); border-radius: 2px;"></span>
@@ -46,11 +116,23 @@
     </span>
   </div>
 
-  <!-- Filter Form -->
-  <form method="GET" class="card" style="margin-top: 1rem; padding: 1rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+  <!-- Filter Form (Auto-submits on change for seamless refresh) -->
+  <form id="sheetFilterForm" method="GET" class="card" style="margin-top: 1rem; padding: 1rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+    <div style="flex: 1; min-width: 200px;">
+      <label class="form-label" style="font-size: 0.75rem;">Flip Report / Test Run</label>
+      <select name="interview" class="form-select" style="font-size: 0.85rem; padding: 0.45rem;" onchange="this.form.submit()">
+        <option value="">-- All Interview Runs Combined --</option>
+        {% for inv in interviews %}
+          <option value="{{ inv.id }}" {% if selected_interview == inv.id|stringformat:"s" %}selected{% endif %}>
+            #{{ inv.id }} - {{ inv.speaker_name }} ({{ inv.rows.count }} rows • {{ inv.created_at|date:"M d, H:i" }})
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
     <div style="flex: 1; min-width: 200px;">
       <label class="form-label" style="font-size: 0.75rem;">Filter by Colony / Area</label>
-      <select name="area" class="form-select telugu-text" style="font-size: 0.85rem; padding: 0.45rem;">
+      <select name="area" class="form-select telugu-text" style="font-size: 0.85rem; padding: 0.45rem;" onchange="this.form.submit()">
         <option value="">All Colonies</option>
         {% for a in areas %}
           <option value="{{ a.id }}" {% if selected_area == a.id|stringformat:"s" %}selected{% endif %}>{{ a.name }}</option>
@@ -59,20 +141,8 @@
     </div>
 
     <div style="flex: 1; min-width: 180px;">
-      <label class="form-label" style="font-size: 0.75rem;">Filter by Speaker</label>
-      <input type="text" name="speaker" class="form-control" placeholder="Search name..." value="{{ selected_speaker }}" style="font-size: 0.85rem; padding: 0.45rem;">
-    </div>
-
-    <div style="flex: 1; min-width: 200px;">
-      <label class="form-label" style="font-size: 0.75rem;">Filter by Specific Run</label>
-      <select name="interview" class="form-select" style="font-size: 0.85rem; padding: 0.45rem;">
-        <option value="">All Interview Runs</option>
-        {% for inv in interviews %}
-          <option value="{{ inv.id }}" {% if selected_interview == inv.id|stringformat:"s" %}selected{% endif %}>
-            #{{ inv.id }} - {{ inv.speaker_name }} ({{ inv.created_at|date:"M d, H:i" }})
-          </option>
-        {% endfor %}
-      </select>
+      <label class="form-label" style="font-size: 0.75rem;">Search by Speaker / Keyword</label>
+      <input type="text" name="speaker" class="form-control" placeholder="Search speaker..." value="{{ selected_speaker }}" style="font-size: 0.85rem; padding: 0.45rem;">
     </div>
 
     <div style="display: flex; gap: 0.5rem;">
@@ -239,6 +309,30 @@
     } catch (err) {
       cellElement.classList.remove('cell-saving');
       saveIndicator.innerHTML = '<span style="color: #ef4444;">Network error while saving</span>';
+    }
+  }
+
+  async function deleteActiveReport(id, speakerName) {
+    if (!confirm(`Are you sure you want to delete Report #${id} ("${speakerName}")?\n\nThis will permanently delete this report and all its extracted problem rows.`)) {
+      return;
+    }
+    try {
+      const response = await fetch(`/interview/${id}/delete/`, {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert(data.message);
+        window.location.href = '/sheet/';
+      } else {
+        alert(data.error || 'Failed to delete report.');
+      }
+    } catch (e) {
+      alert('Network error while deleting report.');
     }
   }
 </script>

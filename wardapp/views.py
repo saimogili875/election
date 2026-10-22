@@ -102,7 +102,11 @@ def upload_view(request):
 
     areas = Area.objects.all().order_by("name")
     prompts = PromptVersion.objects.all().order_by("-created_at")
-    recent_interviews = Interview.objects.all().order_by("-created_at")[:5]
+    recent_interviews = (
+        Interview.objects.prefetch_related("rows", "area")
+        .all()
+        .order_by("-created_at")[:20]
+    )
     return render(
         request,
         "wardapp/upload.html",
@@ -327,7 +331,11 @@ def sheet_view(request):
         )
 
     areas = Area.objects.all().order_by("name")
-    interviews = Interview.objects.all().order_by("-created_at")
+    interviews = Interview.objects.prefetch_related("rows").all().order_by("-created_at")
+    total_all_rows = Row.objects.count()
+    active_interview = None
+    if interview_filter:
+        active_interview = Interview.objects.filter(id=interview_filter).first()
 
     return render(
         request,
@@ -335,8 +343,10 @@ def sheet_view(request):
         {
             "grouped_data": grouped_data,
             "total_rows": rows_qs.count(),
+            "total_all_rows": total_all_rows,
             "areas": areas,
             "interviews": interviews,
+            "active_interview": active_interview,
             "selected_area": area_filter,
             "selected_speaker": speaker_filter,
             "selected_interview": interview_filter,
@@ -504,6 +514,78 @@ def export_interview_json(request, interview_id):
         "raw_extract_response": interview.raw_extract_response,
     }
     return JsonResponse(data, json_dumps_params={"ensure_ascii": False, "indent": 2})
+
+
+@csrf_exempt
+def delete_interview_view(request, interview_id):
+    """Deletes an interview run, all its extracted rows, and associated audio file."""
+    if request.method in ["POST", "DELETE"]:
+        interview = get_object_or_404(Interview, id=interview_id)
+        run_id = interview.id
+        speaker_name = interview.speaker_name
+        row_count = interview.rows.count()
+
+        if interview.audio_file:
+            try:
+                if os.path.isfile(interview.audio_file.path):
+                    os.remove(interview.audio_file.path)
+            except Exception:
+                pass
+
+        interview.delete()
+
+        is_ajax = (
+            request.headers.get("x-requested-with") == "XMLHttpRequest"
+            or "application/json" in request.headers.get("accept", "")
+            or request.content_type == "application/json"
+        )
+        if is_ajax:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": f"Run #{run_id} ({speaker_name}) and its {row_count} rows deleted successfully.",
+                    "deleted_id": run_id,
+                }
+            )
+
+        referrer = request.META.get("HTTP_REFERER", "")
+        if "/sheet/" in referrer:
+            return redirect("/sheet/")
+        return redirect("/")
+
+    return JsonResponse({"error": "POST or DELETE required"}, status=405)
+
+
+@csrf_exempt
+def delete_all_interviews_view(request):
+    """Deletes all interview runs and rows."""
+    if request.method in ["POST", "DELETE"]:
+        interviews = Interview.objects.all()
+        count = interviews.count()
+        for inv in interviews:
+            if inv.audio_file:
+                try:
+                    if os.path.isfile(inv.audio_file.path):
+                        os.remove(inv.audio_file.path)
+                except Exception:
+                    pass
+        interviews.delete()
+
+        is_ajax = (
+            request.headers.get("x-requested-with") == "XMLHttpRequest"
+            or "application/json" in request.headers.get("accept", "")
+            or request.content_type == "application/json"
+        )
+        if is_ajax:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": f"All {count} runs and their rows deleted successfully.",
+                }
+            )
+        return redirect("/")
+
+    return JsonResponse({"error": "POST or DELETE required"}, status=405)
 
 
 # ---------------------------------------------------------
